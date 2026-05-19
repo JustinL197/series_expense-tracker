@@ -1,20 +1,35 @@
+import 'react-native-gesture-handler';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import { CategoriesProvider } from './src/context/CategoriesContext';
+import SummaryScreen from './src/screens/SummaryScreen';
+import AddExpenseScreen from './src/screens/AddExpenseScreen';
+import ExpenseListScreen from './src/screens/ExpenseListScreen';
+
+const Tab = createMaterialTopTabNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <CategoriesProvider>
+    <NavigationContainer>
+      <StatusBar style="light" />
+      <Tab.Navigator
+        initialRouteName="Add"
+        tabBarPosition="bottom"
+        screenOptions={{
+          tabBarStyle: { display: 'none' },
+          swipeEnabled: true,
+          animationEnabled: true,
+          lazy: false,
+        }}
+      >
+        <Tab.Screen name="Summary" component={SummaryScreen} />
+        <Tab.Screen name="Add" component={AddExpenseScreen} />
+        <Tab.Screen name="List" component={ExpenseListScreen} />
+      </Tab.Navigator>
+    </NavigationContainer>
+    </CategoriesProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
