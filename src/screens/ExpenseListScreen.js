@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, ActivityIndicator, Modal, TextInput,
@@ -17,11 +17,11 @@ export default function ExpenseListScreen() {
   const [editAmount, setEditAmount] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const activeFilterRef = useRef(null);
 
-  const load = useCallback(async () => {
-    if (expenses.length === 0) setLoading(true);
+  const load = useCallback(async (filter) => {
     try {
-      const params = activeFilter ? { category: activeFilter } : {};
+      const params = filter ? { category: filter } : {};
       const data = await api.getExpenses(params);
       setExpenses(data);
     } catch (e) {
@@ -29,9 +29,17 @@ export default function ExpenseListScreen() {
     } finally {
       setLoading(false);
     }
-  }, [activeFilter]);
+  }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load(activeFilterRef.current);
+  }, [load]));
+
+  const handleFilterChange = (filter) => {
+    activeFilterRef.current = filter;
+    setActiveFilter(filter);
+    load(filter);
+  };
 
   const handleDelete = (id) => {
     Alert.alert('Delete', 'Remove this expense?', [
@@ -109,7 +117,7 @@ export default function ExpenseListScreen() {
           return (
             <TouchableOpacity
               style={[styles.filterPill, active && styles.filterPillActive]}
-              onPress={() => setActiveFilter(isAll ? null : item.label)}
+              onPress={() => handleFilterChange(isAll ? null : item.label)}
             >
               {item.emoji ? <Text style={styles.filterEmoji}>{item.emoji}</Text> : null}
               <Text style={[styles.filterText, active && styles.filterTextActive]}>

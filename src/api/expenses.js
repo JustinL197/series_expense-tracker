@@ -1,11 +1,13 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const url = `${BASE_URL}${path}`;
+  console.log(`[API] ${options.method || 'GET'} ${url}`);
+  const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Request failed: ${res.status} ${options.method || 'GET'} ${url}`);
   return res.json();
 }
 
