@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "production": {
+      "ios": {
+        "distribution": "store"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "justin.sanghak@gmail.com",
+        "ascAppId": "6771302209",
+        "appleTeamId": "Z2YR48CZU7"
+      }
+    }
+  }
+}

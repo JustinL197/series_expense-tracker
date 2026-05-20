@@ -60,7 +60,7 @@ app.post('/auth/apple', async (req, res) => {
     res.json({ token });
   } catch (err) {
     console.error('Apple auth error:', err);
-    res.status(401).json({ error: 'Apple authentication failed', detail: err?.message });
+    res.status(401).json({ error: 'Apple authentication failed' });
   }
 });
 

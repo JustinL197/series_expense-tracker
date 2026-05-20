@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "expense-tracker-v2",
-    "slug": "expense-tracker-v2",
+    "name": "Series Expense",
+    "slug": "series-expense",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,7 +16,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.justin.expensetracker",
       "entitlements": {
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default",
+          "Default"
+        ]
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -33,6 +39,11 @@
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "expo-apple-authentication"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ecfb8877-c04d-4fb1-80b0-8fba3d036443"
+      }
+    }
   }
 }
