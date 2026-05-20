@@ -177,7 +177,7 @@ export default function ExpenseListScreen() {
                     style={[styles.pill, active && styles.pillActive]}
                     onPress={() => setEditCategory(cat.label)}
                   >
-                    <Text style={styles.pillEmoji}>{cat.emoji}</Text>
+                    {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
                     <Text style={[styles.pillText, active && styles.pillTextActive]}>
                       {cat.label}
                     </Text>

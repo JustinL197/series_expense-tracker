@@ -1,7 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
@@ -10,6 +12,8 @@ import CalendarModal from '../components/CalendarModal';
 
 const RANGES = ['day', 'week', 'month'];
 const RANGE_LABELS = { day: 'Today', week: 'This Week', month: 'This Month' };
+const BUDGET_LABELS = { day: 'daily', week: 'weekly', month: 'monthly' };
+const BUDGET_KEYS = { day: 'budget_day', week: 'budget_week', month: 'budget_month' };
 
 export default function SummaryScreen() {
   const { allCategories } = useCategories();
@@ -17,6 +21,21 @@ export default function SummaryScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [budgets, setBudgets] = useState({ day: null, week: null, month: null });
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+
+  useEffect(() => {
+    Promise.all(
+      RANGES.map((r) => AsyncStorage.getItem(BUDGET_KEYS[r]))
+    ).then(([day, week, month]) => {
+      setBudgets({
+        day: day ? parseFloat(day) : null,
+        week: week ? parseFloat(week) : null,
+        month: month ? parseFloat(month) : null,
+      });
+    });
+  }, []);
 
   const load = useCallback(async () => {
     if (!summary) setLoading(true);
@@ -31,6 +50,32 @@ export default function SummaryScreen() {
   }, [range]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const currentBudget = budgets[range];
+  const spent = summary?.total ?? 0;
+  const diff = currentBudget != null ? currentBudget - spent : null;
+  const progress = currentBudget ? Math.min(spent / currentBudget, 1) : 0;
+  const isOver = diff != null && diff < 0;
+
+  const openBudgetModal = () => {
+    setBudgetInput(currentBudget ? String(currentBudget) : '');
+    setShowBudgetModal(true);
+  };
+
+  const saveBudget = async () => {
+    if (!budgetInput.trim()) {
+      setBudgets((prev) => ({ ...prev, [range]: null }));
+      await AsyncStorage.removeItem(BUDGET_KEYS[range]);
+      setShowBudgetModal(false);
+      return;
+    }
+    const val = parseFloat(budgetInput);
+    if (!val || val <= 0) return;
+    setBudgets((prev) => ({ ...prev, [range]: val }));
+    await AsyncStorage.setItem(BUDGET_KEYS[range], String(val));
+    setShowBudgetModal(false);
+    setBudgetInput('');
+  };
 
   const getCategoryEmoji = (label) =>
     allCategories.find((c) => c.label === label)?.emoji ?? '';
@@ -59,9 +104,7 @@ export default function SummaryScreen() {
         <>
           <View style={styles.totalBlock}>
             <Text style={styles.totalLabel}>{RANGE_LABELS[range]}</Text>
-            <Text style={styles.totalAmount}>
-              ${summary?.total?.toFixed(2) ?? '0.00'}
-            </Text>
+            <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
             <View style={styles.totalFooter}>
               <Text style={styles.totalCount}>
                 {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
@@ -78,6 +121,40 @@ export default function SummaryScreen() {
 
           {summary?.byCategory && Object.keys(summary.byCategory).length > 0 && (
             <View style={styles.breakdown}>
+              {currentBudget == null && (
+                <TouchableOpacity onPress={openBudgetModal} style={styles.setBudgetBtn}>
+                  <Text style={styles.setBudgetText}>
+                    Set {BUDGET_LABELS[range]} budget
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {currentBudget != null ? (
+                <>
+                  <View style={styles.budgetRow}>
+                    <Text style={[styles.budgetDiff, isOver ? styles.over : styles.under]}>
+                      {isOver
+                        ? `$${Math.abs(diff).toFixed(2)} over`
+                        : `$${diff.toFixed(2)} remaining`}
+                    </Text>
+                    <TouchableOpacity onPress={openBudgetModal}>
+                      <Text style={styles.budgetLabel}>
+                        ${currentBudget.toFixed(2)} budget
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${progress * 100}%` },
+                        isOver && styles.progressFillOver,
+                      ]}
+                    />
+                  </View>
+                </>
+              ) : (
+                <View style={styles.staticDivider} />
+              )}
               <Text style={styles.breakdownHeader}>By Category</Text>
               {Object.entries(summary.byCategory)
                 .sort(([, a], [, b]) => b - a)
@@ -94,6 +171,51 @@ export default function SummaryScreen() {
       )}
 
       <Text style={styles.hint}>Swipe to add or view expenses →</Text>
+
+      <Modal visible={showBudgetModal} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>
+              {RANGE_LABELS[range]} Budget
+            </Text>
+
+            <Text style={styles.modalLabel}>Amount</Text>
+            <TextInput
+              style={styles.modalInput}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={COLORS.subtext}
+              value={budgetInput}
+              onChangeText={(v) => {
+                if (/^\d*\.?\d{0,2}$/.test(v)) setBudgetInput(v);
+              }}
+              autoFocus
+              maxLength={8}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => { setShowBudgetModal(false); setBudgetInput(''); }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSave, !budgetInput && currentBudget == null && styles.modalSaveDisabled]}
+                onPress={saveBudget}
+                disabled={!budgetInput && currentBudget == null}
+              >
+                <Text style={styles.modalSaveText}>
+                  {!budgetInput && currentBudget != null ? 'Remove' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -152,7 +274,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
-    marginTop: 4,
+    marginTop: 12,
   },
   totalCount: {
     color: COLORS.subtext,
@@ -164,9 +286,57 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   breakdown: {
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 24,
+    paddingTop: 0,
+  },
+  staticDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginBottom: 24,
+  },
+  setBudgetBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 10,
+  },
+  setBudgetText: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+  budgetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  budgetDiff: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  under: {
+    color: '#4CD964',
+  },
+  over: {
+    color: '#C0392B',
+  },
+  budgetLabel: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+  progressTrack: {
+    height: 2,
+    backgroundColor: COLORS.border,
+    borderRadius: 1,
+    marginBottom: 24,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.text,
+    borderRadius: 1,
+  },
+  progressFillOver: {
+    backgroundColor: '#C0392B',
   },
   breakdownHeader: {
     color: COLORS.subtext,
@@ -200,5 +370,69 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     color: COLORS.border,
     fontSize: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  modalSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 28,
+    paddingBottom: 48,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  modalLabel: {
+    color: COLORS.subtext,
+    fontSize: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: COLORS.pill,
+    color: COLORS.text,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    marginBottom: 24,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalCancel: {
+    flex: 1,
+    backgroundColor: COLORS.pill,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: COLORS.subtext,
+    fontSize: 15,
+  },
+  modalSave: {
+    flex: 1,
+    backgroundColor: COLORS.text,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  modalSaveDisabled: {
+    backgroundColor: COLORS.pill,
+  },
+  modalSaveText: {
+    color: COLORS.background,
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
