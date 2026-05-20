@@ -1,10 +1,19 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
+let _token = null;
+
+export function setAuthToken(token) {
+  _token = token;
+}
+
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
   console.log(`[API] ${options.method || 'GET'} ${url}`);
   const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(_token ? { Authorization: `Bearer ${_token}` } : {}),
+    },
     ...options,
   });
   if (!res.ok) throw new Error(`Request failed: ${res.status} ${options.method || 'GET'} ${url}`);
