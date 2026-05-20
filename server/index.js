@@ -41,8 +41,10 @@ app.post('/auth/apple', async (req, res) => {
       return res.status(400).json({ error: 'identityToken is required' });
     }
 
+    // Expo Go uses its own bundle ID as the audience — accept both during development
+    const audience = [APPLE_BUNDLE_ID, 'host.exp.Exponent'];
     const applePayload = await appleSignin.verifyIdToken(identityToken, {
-      audience: APPLE_BUNDLE_ID,
+      audience,
       ignoreExpiration: false,
     });
 
