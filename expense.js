@@ -18,6 +18,10 @@ const {database} = require('./database');
 async function addTransaction(title, category, amount){
     try{
         let converted_amount = Number(amount)
+
+        if (Number.isNaN(converted_amount)){
+            throw new Error('amount must be a number');
+        }
    
         await database.expenses.create({
             data: {
@@ -28,6 +32,7 @@ async function addTransaction(title, category, amount){
             }
         })
         return true
+        
     }catch(error){
         console.log("cannot add transaction, please try again");
         throw error;
