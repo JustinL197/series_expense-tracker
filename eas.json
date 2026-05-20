@@ -6,6 +6,9 @@
     "production": {
       "ios": {
         "distribution": "store"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://expense-tracker-production-dfea.up.railway.app"
       }
     }
   },
