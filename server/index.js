@@ -106,14 +106,19 @@ app.get('/expenses', requireAuth, async (req, res) => {
 // GET /expenses/summary
 app.get('/expenses/summary', requireAuth, async (req, res) => {
   try {
-    const { range } = req.query;
-    const now = new Date();
-    const from = new Date();
+    const { range, from: fromParam } = req.query;
 
-    if (range === 'day') from.setHours(0, 0, 0, 0);
-    else if (range === 'week') from.setDate(now.getDate() - 7);
-    else if (range === 'month') from.setDate(1), from.setHours(0, 0, 0, 0);
-    else from.setFullYear(2000);
+    // Prefer client-supplied `from` so the range respects the user's local timezone
+    let from;
+    if (fromParam) {
+      from = new Date(fromParam);
+    } else {
+      from = new Date();
+      if (range === 'day') from.setHours(0, 0, 0, 0);
+      else if (range === 'week') from.setDate(from.getDate() - 7);
+      else if (range === 'month') from.setDate(1), from.setHours(0, 0, 0, 0);
+      else from.setFullYear(2000);
+    }
 
     const expenses = await prisma.expense.findMany({
       where: { userId: req.userId, date: { gte: from } },
