@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
@@ -17,6 +18,8 @@ export default function ExpenseListScreen() {
   const [editAmount, setEditAmount] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editCategory, setEditCategory] = useState('');
+  const [editDate, setEditDate] = useState(new Date());
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const activeFilterRef = useRef(null);
 
   const load = useCallback(async (filter) => {
@@ -60,6 +63,7 @@ export default function ExpenseListScreen() {
     setEditAmount(String(expense.amount));
     setEditTitle(expense.title);
     setEditCategory(expense.category);
+    setEditDate(new Date(expense.date));
   };
 
   const handleSaveEdit = async () => {
@@ -68,6 +72,7 @@ export default function ExpenseListScreen() {
         title: editTitle,
         category: editCategory,
         amount: parseFloat(editAmount),
+        date: editDate.toISOString(),
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
@@ -189,6 +194,29 @@ export default function ExpenseListScreen() {
                 );
               })}
             </View>
+
+            <Text style={styles.modalLabel}>Date</Text>
+            <TouchableOpacity
+              style={styles.datePill}
+              onPress={() => setShowEditDatePicker(true)}
+            >
+              <Text style={styles.datePillText}>
+                {editDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </TouchableOpacity>
+            {showEditDatePicker && (
+              <DateTimePicker
+                value={editDate}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date()}
+                themeVariant="dark"
+                onChange={(_, selected) => {
+                  setShowEditDatePicker(false);
+                  if (selected) setEditDate(selected);
+                }}
+              />
+            )}
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -361,6 +389,18 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: COLORS.pillActiveText,
     fontWeight: '600',
+  },
+  datePill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: COLORS.pill,
+    marginBottom: 28,
+  },
+  datePillText: {
+    color: COLORS.text,
+    fontSize: 14,
   },
   modalActions: {
     flexDirection: 'row',
