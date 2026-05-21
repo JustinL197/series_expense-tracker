@@ -141,27 +141,27 @@ export default function SummaryScreen() {
             activeOffsetX={[-20, 20]}
             failOffsetY={[-15, 15]}
           >
-          <View style={styles.totalBlock}>
-            <Text style={styles.totalLabel}>
-              {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
-            </Text>
-            <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
-            <View style={styles.totalFooter}>
-              <Text style={styles.totalCount}>
-                {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
+            <View style={styles.totalBlock}>
+              <Text style={styles.totalLabel}>
+                {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
               </Text>
-              {range === 'day' && (
-                <Text style={styles.swipeHint}>
-                  {dayOffset < 0 ? '← ' : ''}swipe{dayOffset === 0 ? ' ←' : ' →'}
+              <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
+              <View style={styles.totalFooter}>
+                <Text style={styles.totalCount}>
+                  {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
                 </Text>
-              )}
-              {range === 'month' && (
-                <TouchableOpacity onPress={() => setShowCalendar(true)}>
-                  <Text style={styles.calendarLink}>View Calendar</Text>
-                </TouchableOpacity>
-              )}
+                {range === 'day' && (
+                  <Text style={styles.swipeHint}>
+                    {dayOffset < 0 ? '← ' : ''}swipe{dayOffset === 0 ? ' ←' : ' →'}
+                  </Text>
+                )}
+                {range === 'month' && (
+                  <TouchableOpacity onPress={() => setShowCalendar(true)}>
+                    <Text style={styles.calendarLink}>View Calendar</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
           </PanGestureHandler>
 
           <CalendarModal visible={showCalendar} onClose={() => setShowCalendar(false)} />
