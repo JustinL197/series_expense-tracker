@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
@@ -159,76 +159,82 @@ export default function ExpenseListScreen() {
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Edit Expense</Text>
 
-            <Text style={styles.modalLabel}>Amount</Text>
-            <TextInput
-              style={styles.modalInput}
-              keyboardType="decimal-pad"
-              value={editAmount}
-              onChangeText={setEditAmount}
-              placeholderTextColor={COLORS.subtext}
-            />
-
-            <Text style={styles.modalLabel}>Note</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              placeholderTextColor={COLORS.subtext}
-            />
-
-            <Text style={styles.modalLabel}>Category</Text>
-            <View style={styles.pillGrid}>
-              {allCategories.map((cat) => {
-                const active = editCategory === cat.label;
-                return (
-                  <TouchableOpacity
-                    key={cat.label}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setEditCategory(cat.label)}
-                  >
-                    {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                      {cat.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <Text style={styles.modalLabel}>Date</Text>
-            <TouchableOpacity
-              style={styles.datePill}
-              onPress={() => setShowEditDatePicker(true)}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScroll}
             >
-              <Text style={styles.datePillText}>
-                {editDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-              </Text>
-            </TouchableOpacity>
-            {showEditDatePicker && (
-              <DateTimePicker
-                value={editDate}
-                mode="date"
-                display="spinner"
-                maximumDate={new Date()}
-                themeVariant="dark"
-                onChange={(_, selected) => {
-                  setShowEditDatePicker(false);
-                  if (selected) setEditDate(selected);
-                }}
+              <Text style={styles.modalLabel}>Amount</Text>
+              <TextInput
+                style={styles.modalInput}
+                keyboardType="decimal-pad"
+                value={editAmount}
+                onChangeText={setEditAmount}
+                placeholderTextColor={COLORS.subtext}
               />
-            )}
 
-            <View style={styles.modalActions}>
+              <Text style={styles.modalLabel}>Note</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editTitle}
+                onChangeText={setEditTitle}
+                placeholderTextColor={COLORS.subtext}
+              />
+
+              <Text style={styles.modalLabel}>Category</Text>
+              <View style={styles.pillGrid}>
+                {allCategories.map((cat) => {
+                  const active = editCategory === cat.label;
+                  return (
+                    <TouchableOpacity
+                      key={cat.label}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setEditCategory(cat.label)}
+                    >
+                      {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={styles.modalLabel}>Date</Text>
               <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setEditTarget(null)}
+                style={styles.datePill}
+                onPress={() => setShowEditDatePicker(true)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.datePillText}>
+                  {editDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSave} onPress={handleSaveEdit}>
-                <Text style={styles.modalSaveText}>Save</Text>
-              </TouchableOpacity>
-            </View>
+              {showEditDatePicker && (
+                <DateTimePicker
+                  value={editDate}
+                  mode="date"
+                  display="spinner"
+                  maximumDate={new Date()}
+                  themeVariant="dark"
+                  onChange={(_, selected) => {
+                    setShowEditDatePicker(false);
+                    if (selected) setEditDate(selected);
+                  }}
+                />
+              )}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => setEditTarget(null)}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSave} onPress={handleSaveEdit}>
+                  <Text style={styles.modalSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
         </KeyboardAvoidingView>
@@ -338,6 +344,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     padding: 28,
     paddingBottom: 48,
+    maxHeight: '90%',
+  },
+  modalScroll: {
+    paddingBottom: 8,
   },
   modalTitle: {
     color: COLORS.text,
