@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { PanGestureHandler, State } from 'react-native-gesture-handler';
+import { useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
@@ -62,11 +62,18 @@ export default function SummaryScreen() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  const onDaySwipe = ({ nativeEvent }) => {
-    if (nativeEvent.state !== State.END) return;
-    const { translationX } = nativeEvent;
-    if (translationX < -40) setDayOffset((prev) => prev - 1);
-    else if (translationX > 40) setDayOffset((prev) => Math.min(prev + 1, 0));
+  const touchStartX = useRef(null);
+
+  const onTotalTouchStart = (e) => {
+    touchStartX.current = e.nativeEvent.pageX;
+  };
+
+  const onTotalTouchEnd = (e) => {
+    if (touchStartX.current === null || range !== 'day') return;
+    const dx = e.nativeEvent.pageX - touchStartX.current;
+    touchStartX.current = null;
+    if (dx < -40) setDayOffset((prev) => prev - 1);
+    else if (dx > 40) setDayOffset((prev) => Math.min(prev + 1, 0));
   };
 
   const load = useCallback(async () => {
@@ -135,34 +142,31 @@ export default function SummaryScreen() {
         <ActivityIndicator color={COLORS.text} style={{ marginTop: 60 }} />
       ) : (
         <>
-          <PanGestureHandler
-            enabled={range === 'day'}
-            onHandlerStateChange={onDaySwipe}
-            activeOffsetX={[-20, 20]}
-            failOffsetY={[-15, 15]}
+          <View
+            style={styles.totalBlock}
+            onTouchStart={onTotalTouchStart}
+            onTouchEnd={onTotalTouchEnd}
           >
-            <View style={styles.totalBlock}>
-              <Text style={styles.totalLabel}>
-                {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
+            <Text style={styles.totalLabel}>
+              {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
+            </Text>
+            <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
+            <View style={styles.totalFooter}>
+              <Text style={styles.totalCount}>
+                {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
               </Text>
-              <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
-              <View style={styles.totalFooter}>
-                <Text style={styles.totalCount}>
-                  {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
+              {range === 'day' && (
+                <Text style={styles.swipeHint}>
+                  {dayOffset < 0 ? '← ' : ''}swipe{dayOffset === 0 ? ' ←' : ' →'}
                 </Text>
-                {range === 'day' && (
-                  <Text style={styles.swipeHint}>
-                    {dayOffset < 0 ? '← ' : ''}swipe{dayOffset === 0 ? ' ←' : ' →'}
-                  </Text>
-                )}
-                {range === 'month' && (
-                  <TouchableOpacity onPress={() => setShowCalendar(true)}>
-                    <Text style={styles.calendarLink}>View Calendar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              )}
+              {range === 'month' && (
+                <TouchableOpacity onPress={() => setShowCalendar(true)}>
+                  <Text style={styles.calendarLink}>View Calendar</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          </PanGestureHandler>
+          </View>
 
           <CalendarModal visible={showCalendar} onClose={() => setShowCalendar(false)} />
 
