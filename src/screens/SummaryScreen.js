@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform, PanResponder,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
@@ -61,16 +62,12 @@ export default function SummaryScreen() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12,
-      onPanResponderRelease: (_, { dx }) => {
-        if (dx < -40) setDayOffset((prev) => prev - 1);
-        else if (dx > 40) setDayOffset((prev) => Math.min(prev + 1, 0));
-      },
-    })
-  ).current;
+  const onDaySwipe = ({ nativeEvent }) => {
+    if (nativeEvent.state !== State.END) return;
+    const { translationX } = nativeEvent;
+    if (translationX < -40) setDayOffset((prev) => prev - 1);
+    else if (translationX > 40) setDayOffset((prev) => Math.min(prev + 1, 0));
+  };
 
   const load = useCallback(async () => {
     if (!summary) setLoading(true);
@@ -138,10 +135,13 @@ export default function SummaryScreen() {
         <ActivityIndicator color={COLORS.text} style={{ marginTop: 60 }} />
       ) : (
         <>
-          <View
-            style={styles.totalBlock}
-            {...(range === 'day' ? panResponder.panHandlers : {})}
+          <PanGestureHandler
+            enabled={range === 'day'}
+            onHandlerStateChange={onDaySwipe}
+            activeOffsetX={[-20, 20]}
+            failOffsetY={[-15, 15]}
           >
+          <View style={styles.totalBlock}>
             <Text style={styles.totalLabel}>
               {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
             </Text>
@@ -162,6 +162,7 @@ export default function SummaryScreen() {
               )}
             </View>
           </View>
+          </PanGestureHandler>
 
           <CalendarModal visible={showCalendar} onClose={() => setShowCalendar(false)} />
 
