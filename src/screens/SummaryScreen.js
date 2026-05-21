@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
