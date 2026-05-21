@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  Modal, TextInput, KeyboardAvoidingView, Platform, PanResponder,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -18,6 +18,7 @@ const BUDGET_KEYS = { day: 'budget_day', week: 'budget_week', month: 'budget_mon
 export default function SummaryScreen() {
   const { allCategories } = useCategories();
   const [range, setRange] = useState('month');
+  const [dayOffset, setDayOffset] = useState(0);
   const [showCalendar, setShowCalendar] = useState(false);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,17 +38,52 @@ export default function SummaryScreen() {
     });
   }, []);
 
+  // Reset to today when switching away from day range
+  useEffect(() => {
+    if (range !== 'day') setDayOffset(0);
+  }, [range]);
+
+  function getDayRange(offset) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const from = new Date(d);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(d);
+    to.setHours(23, 59, 59, 999);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
+
+  function getDayLabel(offset) {
+    if (offset === 0) return 'Today';
+    if (offset === -1) return 'Yesterday';
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 12,
+      onPanResponderRelease: (_, { dx }) => {
+        if (dx < -40) setDayOffset((prev) => prev - 1);
+        else if (dx > 40) setDayOffset((prev) => Math.min(prev + 1, 0));
+      },
+    })
+  ).current;
+
   const load = useCallback(async () => {
     if (!summary) setLoading(true);
     try {
-      const data = await api.getSummary(range);
+      const dateOverride = range === 'day' ? getDayRange(dayOffset) : undefined;
+      const data = await api.getSummary(range, dateOverride);
       setSummary(data);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, dayOffset]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -102,13 +138,23 @@ export default function SummaryScreen() {
         <ActivityIndicator color={COLORS.text} style={{ marginTop: 60 }} />
       ) : (
         <>
-          <View style={styles.totalBlock}>
-            <Text style={styles.totalLabel}>{RANGE_LABELS[range]}</Text>
+          <View
+            style={styles.totalBlock}
+            {...(range === 'day' ? panResponder.panHandlers : {})}
+          >
+            <Text style={styles.totalLabel}>
+              {range === 'day' ? getDayLabel(dayOffset) : RANGE_LABELS[range]}
+            </Text>
             <Text style={styles.totalAmount}>${spent.toFixed(2)}</Text>
             <View style={styles.totalFooter}>
               <Text style={styles.totalCount}>
                 {summary?.count ?? 0} expense{summary?.count !== 1 ? 's' : ''}
               </Text>
+              {range === 'day' && (
+                <Text style={styles.swipeHint}>
+                  {dayOffset < 0 ? '← ' : ''}swipe{dayOffset === 0 ? ' ←' : ' →'}
+                </Text>
+              )}
               {range === 'month' && (
                 <TouchableOpacity onPress={() => setShowCalendar(true)}>
                   <Text style={styles.calendarLink}>View Calendar</Text>
@@ -284,6 +330,10 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 13,
     textDecorationLine: 'underline',
+  },
+  swipeHint: {
+    color: COLORS.border,
+    fontSize: 12,
   },
   breakdown: {
     paddingTop: 0,

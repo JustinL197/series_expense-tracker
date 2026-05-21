@@ -38,9 +38,11 @@ function localRangeFrom(range) {
 }
 
 export const api = {
-  getSummary: (range) => {
-    const from = localRangeFrom(range);
-    return request(`/expenses/summary?from=${encodeURIComponent(from)}`);
+  getSummary: (range, { from, to } = {}) => {
+    const resolvedFrom = from ?? localRangeFrom(range);
+    const params = new URLSearchParams({ from: resolvedFrom });
+    if (to) params.set('to', to);
+    return request(`/expenses/summary?${params}`);
   },
   getExpenses: (params = {}) => {
     const query = new URLSearchParams(params).toString();

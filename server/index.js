@@ -106,7 +106,7 @@ app.get('/expenses', requireAuth, async (req, res) => {
 // GET /expenses/summary
 app.get('/expenses/summary', requireAuth, async (req, res) => {
   try {
-    const { range, from: fromParam } = req.query;
+    const { range, from: fromParam, to: toParam } = req.query;
 
     // Prefer client-supplied `from` so the range respects the user's local timezone
     let from;
@@ -120,8 +120,11 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
       else from.setFullYear(2000);
     }
 
+    const dateFilter = { gte: from };
+    if (toParam) dateFilter.lte = new Date(toParam);
+
     const expenses = await prisma.expense.findMany({
-      where: { userId: req.userId, date: { gte: from } },
+      where: { userId: req.userId, date: dateFilter },
     });
 
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
