@@ -64,6 +64,33 @@ app.post('/auth/apple', async (req, res) => {
   }
 });
 
+// --- Category routes ---
+
+app.get('/categories', requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    const categories = user?.categories ? JSON.parse(user.categories) : [];
+    res.json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch categories' });
+  }
+});
+
+app.put('/categories', requireAuth, async (req, res) => {
+  try {
+    const { categories } = req.body;
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { categories: JSON.stringify(categories) },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save categories' });
+  }
+});
+
 // --- Expense routes (all require auth) ---
 
 // GET /expenses — optional ?range=day|week|month and ?category=

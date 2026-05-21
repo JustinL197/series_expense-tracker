@@ -53,6 +53,8 @@ export const api = {
     const to = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
     return request(`/expenses?from=${from}&to=${to}`);
   },
+  getCategories: () => request('/categories'),
+  saveCategories: (categories) => request('/categories', { method: 'PUT', body: JSON.stringify({ categories }) }),
   addExpense: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
   updateExpense: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteExpense: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),

@@ -8,11 +8,12 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  appleId   String    @unique
-  email     String?
-  createdAt DateTime  @default(now())
-  expenses  Expense[]
+  id         Int       @id @default(autoincrement())
+  appleId    String    @unique
+  email      String?
+  categories String?
+  createdAt  DateTime  @default(now())
+  expenses   Expense[]
 }
 
 model Expense {

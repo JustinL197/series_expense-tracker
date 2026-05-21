@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = 'auth_token';
+const INSTALLED_KEY = 'app_installed';
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 const AuthContext = createContext(null);
@@ -10,7 +12,19 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(undefined); // undefined = loading, null = signed out
 
   useEffect(() => {
-    SecureStore.getItemAsync(TOKEN_KEY).then((t) => setToken(t ?? null));
+    async function loadToken() {
+      const installed = await AsyncStorage.getItem(INSTALLED_KEY);
+      if (!installed) {
+        // Fresh install — AsyncStorage was wiped, so clear any stale Keychain token
+        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await AsyncStorage.setItem(INSTALLED_KEY, '1');
+        setToken(null);
+      } else {
+        const t = await SecureStore.getItemAsync(TOKEN_KEY);
+        setToken(t ?? null);
+      }
+    }
+    loadToken();
   }, []);
 
   async function signIn(identityToken, email) {

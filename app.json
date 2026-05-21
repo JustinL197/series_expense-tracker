@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.justin.expensetracker",
-      "buildNumber": "3",
+      "buildNumber": "4",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default"
