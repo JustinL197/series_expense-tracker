@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   KeyboardAvoidingView, Platform, Alert, ScrollView, Keyboard, Modal,
@@ -10,12 +11,14 @@ import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
 
 export default function AddExpenseScreen() {
+  const insets = useSafeAreaInsets();
   const { allCategories, addCategory, deleteCategory } = useCategories();
 
   const [amount, setAmount] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(null);
   const [date, setDate] = useState(new Date());
+  const [tempDate, setTempDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -91,7 +94,7 @@ export default function AddExpenseScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        contentContainerStyle={styles.inner}
+        contentContainerStyle={[styles.inner, { paddingTop: insets.top + 24 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={Keyboard.dismiss}
@@ -141,6 +144,7 @@ export default function AddExpenseScreen() {
                   <TouchableOpacity
                     style={[styles.pill, active && !deleteMode && styles.pillActive]}
                     onPress={() => {
+                      Keyboard.dismiss();
                       if (deleteMode) {
                         setDeleteMode(false);
                       } else {
@@ -194,22 +198,36 @@ export default function AddExpenseScreen() {
           <Text style={styles.sectionLabel}>Date</Text>
           <TouchableOpacity
             style={styles.datePill}
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => {
+              Keyboard.dismiss();
+              setTempDate(date);
+              setShowDatePicker(true);
+            }}
           >
             <Text style={styles.datePillText}>{formatDate(date)}</Text>
           </TouchableOpacity>
           {showDatePicker && (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display="spinner"
-              maximumDate={new Date()}
-              themeVariant="dark"
-              onChange={(_, selected) => {
-                setShowDatePicker(false);
-                if (selected) setDate(selected);
-              }}
-            />
+            <View>
+              <DateTimePicker
+                value={tempDate}
+                mode="date"
+                display="spinner"
+                maximumDate={new Date()}
+                themeVariant="dark"
+                onChange={(_, selected) => {
+                  if (selected) setTempDate(selected);
+                }}
+              />
+              <TouchableOpacity
+                style={styles.dateConfirmBtn}
+                onPress={() => {
+                  setDate(tempDate);
+                  setShowDatePicker(false);
+                }}
+              >
+                <Text style={styles.dateConfirmText}>✓ Confirm</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -289,7 +307,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   inner: {
-    paddingTop: 70,
+    paddingTop: 0,
     paddingHorizontal: 24,
     paddingBottom: 60,
   },
@@ -408,6 +426,19 @@ const styles = StyleSheet.create({
   datePillText: {
     color: COLORS.text,
     fontSize: 14,
+  },
+  dateConfirmBtn: {
+    alignSelf: 'center',
+    marginTop: 8,
+    backgroundColor: COLORS.text,
+    borderRadius: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
+  },
+  dateConfirmText: {
+    color: COLORS.background,
+    fontSize: 14,
+    fontWeight: '600',
   },
   submitBtn: {
     backgroundColor: COLORS.text,

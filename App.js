@@ -1,5 +1,6 @@
 import 'react-native-gesture-handler';
-import React, { useEffect } from 'react';
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
@@ -17,10 +18,9 @@ const Tab = createMaterialTopTabNavigator();
 function AppNavigator() {
   const { token } = useAuth();
 
-  // Keep the API module in sync with the current token
-  useEffect(() => {
-    setAuthToken(token);
-  }, [token]);
+  // Set synchronously so CategoriesProvider has the token available
+  // the moment it mounts — a useEffect would be too late.
+  setAuthToken(token ?? null);
 
   // token === undefined means SecureStore hasn't resolved yet — render nothing
   if (token === undefined) return null;
@@ -52,10 +52,12 @@ function AppNavigator() {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <AuthProvider>
         <StatusBar style="light" />
         <AppNavigator />
       </AuthProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

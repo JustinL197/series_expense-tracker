@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
   Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
@@ -16,6 +17,7 @@ const BUDGET_LABELS = { day: 'daily', week: 'weekly', month: 'monthly' };
 const BUDGET_KEYS = { day: 'budget_day', week: 'budget_week', month: 'budget_month' };
 
 export default function SummaryScreen() {
+  const insets = useSafeAreaInsets();
   const { allCategories } = useCategories();
   const [range, setRange] = useState('month');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -81,7 +83,7 @@ export default function SummaryScreen() {
     allCategories.find((c) => c.label === label)?.emoji ?? '';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
       <Text style={styles.header}>Summary</Text>
 
       <View style={styles.rangeRow}>
@@ -224,7 +226,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: 70,
     paddingHorizontal: 24,
   },
   header: {

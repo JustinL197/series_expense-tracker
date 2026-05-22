@@ -49,6 +49,14 @@ export default function CalendarModal({ visible, onClose }) {
     }
   }, [year, month]);
 
+  // When modal opens, always bust the cache for the current month
+  // so newly added expenses show up without restarting the app.
+  useEffect(() => {
+    if (visible) {
+      delete cache.current[`${year}-${month}`];
+    }
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (visible) load();
   }, [visible, load]);
@@ -283,6 +291,7 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    height: CELL_SIZE * 6,
   },
   cell: {
     width: CELL_SIZE,
