@@ -10,6 +10,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import PageDots from '../components/PageDots';
 
 const DATE_FILTERS = [
   { label: 'All time', value: null },
@@ -18,19 +19,27 @@ const DATE_FILTERS = [
   { label: 'This month', value: 'month' },
 ];
 
+const FREQ_LABELS = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
 export default function ExpenseListScreen() {
   const insets = useSafeAreaInsets();
   const { allCategories } = useCategories();
 
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'category'
+  const [expandedCategories, setExpandedCategories] = useState({});
+
   const [dateFilter, setDateFilter] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [recurringFilter, setRecurringFilter] = useState(false);
+  const [upcomingFilter, setUpcomingFilter] = useState(false);
   const [showFilterSheet, setShowFilterSheet] = useState(false);
 
-  // Pending filter state inside the sheet (applied on "Apply")
   const [pendingDate, setPendingDate] = useState(null);
   const [pendingCategory, setPendingCategory] = useState(null);
+  const [pendingRecurring, setPendingRecurring] = useState(false);
+  const [pendingUpcoming, setPendingUpcoming] = useState(false);
 
   const [editTarget, setEditTarget] = useState(null);
   const [editAmount, setEditAmount] = useState('');
@@ -39,15 +48,22 @@ export default function ExpenseListScreen() {
   const [editDate, setEditDate] = useState(new Date());
   const [editTempDate, setEditTempDate] = useState(new Date());
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [editIsRecurring, setEditIsRecurring] = useState(false);
+  const [editRecurringFreq, setEditRecurringFreq] = useState('monthly');
+  const [editRecurringAutoAdd, setEditRecurringAutoAdd] = useState(false);
 
   const dateFilterRef = useRef(null);
   const categoryFilterRef = useRef(null);
+  const recurringFilterRef = useRef(false);
+  const upcomingFilterRef = useRef(false);
 
-  const load = useCallback(async (dateF, categoryF) => {
+  const load = useCallback(async (dateF, categoryF, recurringF, upcomingF) => {
     try {
       const params = {};
       if (dateF) params.range = dateF;
       if (categoryF) params.category = categoryF;
+      if (recurringF) params.recurring = 'true';
+      if (upcomingF) params.upcoming = 'true';
       const data = await api.getExpenses(params);
       setExpenses(data);
     } catch (e) {
@@ -58,27 +74,35 @@ export default function ExpenseListScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    load(dateFilterRef.current, categoryFilterRef.current);
+    load(dateFilterRef.current, categoryFilterRef.current, recurringFilterRef.current, upcomingFilterRef.current);
   }, [load]));
 
   const openFilterSheet = () => {
     setPendingDate(dateFilter);
     setPendingCategory(categoryFilter);
+    setPendingRecurring(recurringFilter);
+    setPendingUpcoming(upcomingFilter);
     setShowFilterSheet(true);
   };
 
   const applyFilters = () => {
     dateFilterRef.current = pendingDate;
     categoryFilterRef.current = pendingCategory;
+    recurringFilterRef.current = pendingRecurring;
+    upcomingFilterRef.current = pendingUpcoming;
     setDateFilter(pendingDate);
     setCategoryFilter(pendingCategory);
+    setRecurringFilter(pendingRecurring);
+    setUpcomingFilter(pendingUpcoming);
     setShowFilterSheet(false);
-    load(pendingDate, pendingCategory);
+    load(pendingDate, pendingCategory, pendingRecurring, pendingUpcoming);
   };
 
   const clearFilters = () => {
     setPendingDate(null);
     setPendingCategory(null);
+    setPendingRecurring(false);
+    setPendingUpcoming(false);
   };
 
   const handleDelete = (id) => {
@@ -103,6 +127,9 @@ export default function ExpenseListScreen() {
     const d = new Date(expense.date);
     setEditDate(d);
     setEditTempDate(d);
+    setEditIsRecurring(expense.isRecurring || false);
+    setEditRecurringFreq(expense.recurringFreq || 'monthly');
+    setEditRecurringAutoAdd(expense.recurringAutoAdd || false);
   };
 
   const handleSaveEdit = async () => {
@@ -112,6 +139,9 @@ export default function ExpenseListScreen() {
         category: editCategory,
         amount: parseFloat(editAmount),
         date: editDate.toISOString(),
+        isRecurring: editIsRecurring,
+        recurringFreq: editIsRecurring ? editRecurringFreq : null,
+        recurringAutoAdd: editIsRecurring ? editRecurringAutoAdd : false,
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
@@ -120,43 +150,132 @@ export default function ExpenseListScreen() {
     }
   };
 
-  const formatDate = (iso) =>
-    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    const now = new Date();
+    const isUpcoming = d > now;
+    return {
+      text: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      upcoming: isUpcoming,
+    };
+  };
 
   const getCategoryEmoji = (label) =>
     allCategories.find((c) => c.label === label)?.emoji ?? '';
 
-  const hasActiveFilters = dateFilter !== null || categoryFilter !== null;
+  const hasActiveFilters = dateFilter !== null || categoryFilter !== null || recurringFilter || upcomingFilter;
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={() => openEdit(item)}
-      onLongPress={() => handleDelete(item.id)}
-    >
-      <View style={styles.rowLeft}>
-        <Text style={styles.rowEmoji}>{getCategoryEmoji(item.category)}</Text>
-        <View>
-          <Text style={styles.rowTitle}>{item.title}</Text>
-          <Text style={styles.rowMeta}>
-            {item.category} · {formatDate(item.date)}
-          </Text>
+  // Group expenses by category for category view
+  const grouped = expenses.reduce((acc, e) => {
+    if (!acc[e.category]) acc[e.category] = [];
+    acc[e.category].push(e);
+    return acc;
+  }, {});
+
+  const toggleCategory = (cat) => {
+    setExpandedCategories((prev) => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  const renderRow = (item) => {
+    const { text: dateText, upcoming } = formatDate(item.date);
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={styles.row}
+        onPress={() => openEdit(item)}
+        onLongPress={() => handleDelete(item.id)}
+      >
+        <View style={styles.rowLeft}>
+          <Text style={styles.rowEmoji}>{getCategoryEmoji(item.category)}</Text>
+          <View style={styles.rowMiddle}>
+            <View style={styles.rowTitleRow}>
+              <Text style={styles.rowTitle}>{item.title}</Text>
+              {item.isRecurring && (
+                <Text style={styles.recurringIcon}>↻</Text>
+              )}
+            </View>
+            <Text style={[styles.rowMeta, upcoming && styles.rowMetaUpcoming]}>
+              {item.category} · {dateText}{upcoming ? ' · upcoming' : ''}
+            </Text>
+          </View>
         </View>
-      </View>
-      <Text style={styles.rowAmount}>${item.amount.toFixed(2)}</Text>
-    </TouchableOpacity>
+        <Text style={styles.rowAmount}>${item.amount.toFixed(2)}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderAllView = () => (
+    <FlatList
+      data={expenses}
+      keyExtractor={(item) => String(item.id)}
+      renderItem={({ item }) => renderRow(item)}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+    />
+  );
+
+  const renderCategoryView = () => (
+    <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+      {Object.entries(grouped)
+        .sort(([, a], [, b]) => b.reduce((s, e) => s + e.amount, 0) - a.reduce((s, e) => s + e.amount, 0))
+        .map(([cat, items]) => {
+          const total = items.reduce((s, e) => s + e.amount, 0);
+          const expanded = expandedCategories[cat];
+          return (
+            <View key={cat}>
+              <TouchableOpacity style={styles.categoryHeader} onPress={() => toggleCategory(cat)}>
+                <View style={styles.categoryHeaderLeft}>
+                  <Text style={styles.categoryEmoji}>{getCategoryEmoji(cat)}</Text>
+                  <View>
+                    <Text style={styles.categoryName}>{cat}</Text>
+                    <Text style={styles.categoryCount}>{items.length} expense{items.length !== 1 ? 's' : ''}</Text>
+                  </View>
+                </View>
+                <View style={styles.categoryHeaderRight}>
+                  <Text style={styles.categoryTotal}>${total.toFixed(2)}</Text>
+                  <Text style={styles.chevron}>{expanded ? '›' : '›'}</Text>
+                </View>
+              </TouchableOpacity>
+              {expanded && items.map((item) => (
+                <View key={item.id} style={styles.categoryItem}>
+                  {renderRow(item)}
+                </View>
+              ))}
+            </View>
+          );
+        })}
+    </ScrollView>
   );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
 
-      {/* Header row */}
+      {/* Header */}
       <View style={styles.headerRow}>
         <Text style={styles.header}>Expenses</Text>
-        <TouchableOpacity style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]} onPress={openFilterSheet}>
+        <TouchableOpacity
+          style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
+          onPress={openFilterSheet}
+        >
           <Text style={[styles.filterBtnText, hasActiveFilters && styles.filterBtnTextActive]}>
             {hasActiveFilters ? 'Filtered' : 'Filter'}
           </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* View toggle */}
+      <View style={styles.segmentedControl}>
+        <TouchableOpacity
+          style={[styles.segment, viewMode === 'all' && styles.segmentActive]}
+          onPress={() => setViewMode('all')}
+        >
+          <Text style={[styles.segmentText, viewMode === 'all' && styles.segmentTextActive]}>All</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segment, viewMode === 'category' && styles.segmentActive]}
+          onPress={() => setViewMode('category')}
+        >
+          <Text style={[styles.segmentText, viewMode === 'category' && styles.segmentTextActive]}>By Category</Text>
         </TouchableOpacity>
       </View>
 
@@ -166,15 +285,9 @@ export default function ExpenseListScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyText}>No expenses yet.</Text>
         </View>
-      ) : (
-        <FlatList
-          data={expenses}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-        />
-      )}
+      ) : viewMode === 'all' ? renderAllView() : renderCategoryView()}
+
+      <PageDots activeIndex={2} />
 
       {/* Filter sheet */}
       <Modal visible={showFilterSheet} animationType="slide" transparent>
@@ -187,52 +300,63 @@ export default function ExpenseListScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>Date</Text>
-            <View style={styles.pillGrid}>
-              {DATE_FILTERS.map((f) => {
-                const active = pendingDate === f.value;
-                return (
-                  <TouchableOpacity
-                    key={f.label}
-                    style={[styles.pill, active && styles.pillActive]}
-                    onPress={() => setPendingDate(active ? null : f.value)}
-                  >
-                    <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                      {f.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalLabel}>Date</Text>
+              <View style={styles.pillGrid}>
+                {DATE_FILTERS.map((f) => {
+                  const active = pendingDate === f.value;
+                  return (
+                    <TouchableOpacity
+                      key={f.label}
+                      style={[styles.pill, active && styles.pillActive]}
+                      onPress={() => setPendingDate(active ? null : f.value)}
+                    >
+                      <Text style={[styles.pillText, active && styles.pillTextActive]}>{f.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            {allCategories.length > 0 && (
-              <>
-                <Text style={styles.modalLabel}>Category</Text>
-                <View style={styles.pillGrid}>
-                  {allCategories.map((cat) => {
-                    const active = pendingCategory === cat.label;
-                    return (
-                      <TouchableOpacity
-                        key={cat.label}
-                        style={[styles.pill, active && styles.pillActive]}
-                        onPress={() => setPendingCategory(active ? null : cat.label)}
-                      >
-                        {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                          {cat.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </>
-            )}
+              {allCategories.length > 0 && (
+                <>
+                  <Text style={styles.modalLabel}>Category</Text>
+                  <View style={styles.pillGrid}>
+                    {allCategories.map((cat) => {
+                      const active = pendingCategory === cat.label;
+                      return (
+                        <TouchableOpacity
+                          key={cat.label}
+                          style={[styles.pill, active && styles.pillActive]}
+                          onPress={() => setPendingCategory(active ? null : cat.label)}
+                        >
+                          {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
+                          <Text style={[styles.pillText, active && styles.pillTextActive]}>{cat.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              <Text style={styles.modalLabel}>Type</Text>
+              <View style={styles.pillGrid}>
+                <TouchableOpacity
+                  style={[styles.pill, pendingRecurring && styles.pillActive]}
+                  onPress={() => setPendingRecurring((v) => !v)}
+                >
+                  <Text style={[styles.pillText, pendingRecurring && styles.pillTextActive]}>↻ Recurring</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.pill, pendingUpcoming && styles.pillActive]}
+                  onPress={() => setPendingUpcoming((v) => !v)}
+                >
+                  <Text style={[styles.pillText, pendingUpcoming && styles.pillTextActive]}>Upcoming</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowFilterSheet(false)}
-              >
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowFilterSheet(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSave} onPress={applyFilters}>
@@ -245,18 +369,12 @@ export default function ExpenseListScreen() {
 
       {/* Edit modal */}
       <Modal visible={!!editTarget} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalSheet}>
               <Text style={styles.modalTitle}>Edit Expense</Text>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.modalScroll}
-              >
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
+
                 <Text style={styles.modalLabel}>Amount</Text>
                 <TextInput
                   style={styles.modalInput}
@@ -285,19 +403,14 @@ export default function ExpenseListScreen() {
                         onPress={() => setEditCategory(cat.label)}
                       >
                         {cat.emoji ? <Text style={styles.pillEmoji}>{cat.emoji}</Text> : null}
-                        <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                          {cat.label}
-                        </Text>
+                        <Text style={[styles.pillText, active && styles.pillTextActive]}>{cat.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
                 <Text style={styles.modalLabel}>Date</Text>
-                <TouchableOpacity
-                  style={styles.datePill}
-                  onPress={() => setShowEditDatePicker(true)}
-                >
+                <TouchableOpacity style={styles.datePill} onPress={() => setShowEditDatePicker(true)}>
                   <Text style={styles.datePillText}>
                     {editDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </Text>
@@ -308,22 +421,52 @@ export default function ExpenseListScreen() {
                       value={editTempDate}
                       mode="date"
                       display="spinner"
-                      maximumDate={new Date()}
                       themeVariant="dark"
-                      onChange={(_, selected) => {
-                        if (selected) setEditTempDate(selected);
-                      }}
+                      onChange={(_, selected) => { if (selected) setEditTempDate(selected); }}
                     />
                     <TouchableOpacity
                       style={styles.dateConfirmBtn}
-                      onPress={() => {
-                        setEditDate(editTempDate);
-                        setShowEditDatePicker(false);
-                      }}
+                      onPress={() => { setEditDate(editTempDate); setShowEditDatePicker(false); }}
                     >
                       <Text style={styles.dateConfirmText}>✓ Confirm</Text>
                     </TouchableOpacity>
                   </View>
+                )}
+
+                <View style={styles.recurringRow}>
+                  <Text style={styles.modalLabel}>Recurring</Text>
+                  <TouchableOpacity
+                    style={[styles.toggleTrack, editIsRecurring && styles.toggleTrackOn]}
+                    onPress={() => setEditIsRecurring((v) => !v)}
+                  >
+                    <View style={[styles.toggleThumb, editIsRecurring && styles.toggleThumbOn]} />
+                  </TouchableOpacity>
+                </View>
+                {editIsRecurring && (
+                  <>
+                    <View style={styles.freqRow}>
+                      {['weekly', 'monthly', 'yearly'].map((f) => (
+                        <TouchableOpacity
+                          key={f}
+                          style={[styles.pill, editRecurringFreq === f && styles.pillActive]}
+                          onPress={() => setEditRecurringFreq(f)}
+                        >
+                          <Text style={[styles.pillText, editRecurringFreq === f && styles.pillTextActive]}>
+                            {FREQ_LABELS[f]}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <View style={styles.recurringRow}>
+                      <Text style={styles.autoAddLabel}>Auto-add on due date</Text>
+                      <TouchableOpacity
+                        style={[styles.toggleTrack, editRecurringAutoAdd && styles.toggleTrackOn]}
+                        onPress={() => setEditRecurringAutoAdd((v) => !v)}
+                      >
+                        <View style={[styles.toggleThumb, editRecurringAutoAdd && styles.toggleThumbOn]} />
+                      </TouchableOpacity>
+                    </View>
+                  </>
                 )}
 
                 <View style={styles.modalActions}>
@@ -355,7 +498,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
+    marginBottom: 16,
     paddingHorizontal: 24,
   },
   header: {
@@ -381,8 +524,33 @@ const styles = StyleSheet.create({
     color: COLORS.pillActiveText,
     fontWeight: '600',
   },
+  segmentedControl: {
+    flexDirection: 'row',
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: COLORS.pill,
+    borderRadius: 10,
+    padding: 3,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  segmentActive: {
+    backgroundColor: COLORS.surface,
+  },
+  segmentText: {
+    color: COLORS.subtext,
+    fontSize: 13,
+  },
+  segmentTextActive: {
+    color: COLORS.text,
+    fontWeight: '600',
+  },
   list: {
-    paddingBottom: 40,
+    paddingBottom: 80,
   },
   row: {
     flexDirection: 'row',
@@ -399,6 +567,14 @@ const styles = StyleSheet.create({
     gap: 14,
     flex: 1,
   },
+  rowMiddle: {
+    flex: 1,
+  },
+  rowTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   rowEmoji: {
     fontSize: 22,
   },
@@ -407,14 +583,67 @@ const styles = StyleSheet.create({
     fontSize: 15,
     marginBottom: 2,
   },
+  recurringIcon: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    marginBottom: 2,
+  },
   rowMeta: {
     color: COLORS.subtext,
     fontSize: 12,
+  },
+  rowMetaUpcoming: {
+    color: '#5A8A5A',
   },
   rowAmount: {
     color: COLORS.text,
     fontSize: 15,
     fontWeight: '500',
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  categoryHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  categoryEmoji: {
+    fontSize: 22,
+  },
+  categoryName: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  categoryCount: {
+    color: COLORS.subtext,
+    fontSize: 12,
+  },
+  categoryHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  categoryTotal: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  chevron: {
+    color: COLORS.subtext,
+    fontSize: 18,
+  },
+  categoryItem: {
+    paddingLeft: 12,
+    backgroundColor: COLORS.surface,
   },
   empty: {
     flex: 1,
@@ -429,7 +658,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   clearText: {
     color: COLORS.subtext,
@@ -463,7 +692,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
     marginBottom: 12,
-    marginTop: 4,
+    marginTop: 16,
   },
   modalInput: {
     backgroundColor: COLORS.pill,
@@ -472,13 +701,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
-    marginBottom: 20,
+    marginBottom: 4,
   },
   pillGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 4,
   },
   pill: {
     flexDirection: 'row',
@@ -518,7 +747,7 @@ const styles = StyleSheet.create({
   dateConfirmBtn: {
     alignSelf: 'center',
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 16,
     backgroundColor: COLORS.text,
     borderRadius: 20,
     paddingHorizontal: 28,
@@ -529,10 +758,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  recurringRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  toggleTrackOn: {
+    backgroundColor: '#FFFFFF',
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#666666',
+  },
+  toggleThumbOn: {
+    backgroundColor: '#000000',
+    alignSelf: 'flex-end',
+  },
+  freqRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  autoAddLabel: {
+    color: COLORS.subtext,
+    fontSize: 14,
+  },
   modalActions: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 4,
+    marginTop: 20,
   },
   modalCancel: {
     flex: 1,

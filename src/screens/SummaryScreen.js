@@ -10,6 +10,7 @@ import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
 import CalendarModal from '../components/CalendarModal';
+import PageDots from '../components/PageDots';
 
 const RANGES = ['day', 'week', 'month'];
 const RANGE_LABELS = { day: 'Today', week: 'This Week', month: 'This Month' };
@@ -172,7 +173,7 @@ export default function SummaryScreen() {
         </>
       )}
 
-      <Text style={styles.hint}>Swipe to add or view expenses →</Text>
+      <PageDots activeIndex={0} />
 
       <Modal visible={showBudgetModal} animationType="slide" transparent>
         <KeyboardAvoidingView
@@ -364,13 +365,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 15,
     fontWeight: '500',
-  },
-  hint: {
-    position: 'absolute',
-    bottom: 48,
-    alignSelf: 'center',
-    color: COLORS.border,
-    fontSize: 12,
   },
   modalOverlay: {
     flex: 1,

@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const appleSignin = require('apple-signin-auth');
+const cron = require('node-cron');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
@@ -13,6 +14,16 @@ const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
 
 app.use(cors());
 app.use(express.json());
+
+// --- Helpers ---
+
+function calcNextDueDate(fromDate, freq) {
+  const d = new Date(fromDate);
+  if (freq === 'weekly')  d.setDate(d.getDate() + 7);
+  if (freq === 'monthly') d.setMonth(d.getMonth() + 1);
+  if (freq === 'yearly')  d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
 
 // --- Auth middleware ---
 
@@ -32,8 +43,6 @@ function requireAuth(req, res, next) {
 
 // --- Auth route ---
 
-// POST /auth/apple
-// Body: { identityToken: string, email?: string }
 app.post('/auth/apple', async (req, res) => {
   try {
     const { identityToken, email } = req.body;
@@ -41,7 +50,6 @@ app.post('/auth/apple', async (req, res) => {
       return res.status(400).json({ error: 'identityToken is required' });
     }
 
-    // Expo Go uses its own bundle ID as the audience — accept both during development
     const audience = [APPLE_BUNDLE_ID, 'host.exp.Exponent'];
     const applePayload = await appleSignin.verifyIdToken(identityToken, {
       audience,
@@ -49,7 +57,6 @@ app.post('/auth/apple', async (req, res) => {
     });
 
     const appleId = applePayload.sub;
-
     const user = await prisma.user.upsert({
       where: { appleId },
       update: {},
@@ -91,12 +98,12 @@ app.put('/categories', requireAuth, async (req, res) => {
   }
 });
 
-// --- Expense routes (all require auth) ---
+// --- Expense routes ---
 
-// GET /expenses — optional ?range=day|week|month and ?category=
+// GET /expenses
 app.get('/expenses', requireAuth, async (req, res) => {
   try {
-    const { range, category } = req.query;
+    const { range, category, recurring, upcoming } = req.query;
     const where = { userId: req.userId };
 
     if (range) {
@@ -111,11 +118,13 @@ app.get('/expenses', requireAuth, async (req, res) => {
     if (req.query.from || req.query.to) {
       where.date = {};
       if (req.query.from) where.date.gte = new Date(req.query.from);
-      if (req.query.to) where.date.lte = new Date(req.query.to);
+      if (req.query.to)   where.date.lte = new Date(req.query.to);
     }
 
-    if (category) {
-      where.category = category;
+    if (category) where.category = category;
+    if (recurring === 'true') where.isRecurring = true;
+    if (upcoming === 'true') {
+      where.date = { ...(where.date || {}), gt: new Date() };
     }
 
     const expenses = await prisma.expense.findMany({
@@ -135,7 +144,6 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
   try {
     const { range, from: fromParam, to: toParam } = req.query;
 
-    // Prefer client-supplied `from` so the range respects the user's local timezone
     let from;
     if (fromParam) {
       from = new Date(fromParam);
@@ -150,12 +158,15 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
     const dateFilter = { gte: from };
     if (toParam) dateFilter.lte = new Date(toParam);
 
+    // Exclude future expenses from summary totals
+    const now = new Date();
+    if (!dateFilter.lte || dateFilter.lte > now) dateFilter.lte = now;
+
     const expenses = await prisma.expense.findMany({
       where: { userId: req.userId, date: dateFilter },
     });
 
     const total = expenses.reduce((sum, e) => sum + e.amount, 0);
-
     const byCategory = expenses.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + e.amount;
       return acc;
@@ -171,19 +182,30 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
 // POST /expenses
 app.post('/expenses', requireAuth, async (req, res) => {
   try {
-    const { title, category, amount, date } = req.body;
+    const { title, category, amount, date, isRecurring, recurringFreq, recurringAutoAdd } = req.body;
 
     if (!title || !category || amount == null) {
       return res.status(400).json({ error: 'title, category, and amount are required' });
     }
+
+    const expenseDate = date ? new Date(date) : new Date();
+    const recurring = !!isRecurring;
+    const autoAdd = !!recurringAutoAdd;
+    const nextDueDate = recurring && recurringFreq
+      ? calcNextDueDate(expenseDate, recurringFreq)
+      : null;
 
     const expense = await prisma.expense.create({
       data: {
         title,
         category,
         amount: parseFloat(amount),
-        date: date ? new Date(date) : new Date(),
+        date: expenseDate,
         userId: req.userId,
+        isRecurring: recurring,
+        recurringFreq: recurring ? recurringFreq : null,
+        recurringAutoAdd: autoAdd,
+        nextDueDate,
       },
     });
 
@@ -198,11 +220,16 @@ app.post('/expenses', requireAuth, async (req, res) => {
 app.patch('/expenses/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { title, category, amount, date } = req.body;
+    const { title, category, amount, date, isRecurring, recurringFreq, recurringAutoAdd } = req.body;
 
-    // Verify ownership before updating
     const existing = await prisma.expense.findFirst({ where: { id, userId: req.userId } });
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
+
+    const expenseDate = date ? new Date(date) : existing.date;
+    const recurring = isRecurring != null ? !!isRecurring : existing.isRecurring;
+    const freq = recurringFreq !== undefined ? recurringFreq : existing.recurringFreq;
+    const autoAdd = recurringAutoAdd != null ? !!recurringAutoAdd : existing.recurringAutoAdd;
+    const nextDueDate = recurring && freq ? calcNextDueDate(expenseDate, freq) : null;
 
     const expense = await prisma.expense.update({
       where: { id },
@@ -210,7 +237,11 @@ app.patch('/expenses/:id', requireAuth, async (req, res) => {
         ...(title && { title }),
         ...(category && { category }),
         ...(amount != null && { amount: parseFloat(amount) }),
-        ...(date && { date: new Date(date) }),
+        date: expenseDate,
+        isRecurring: recurring,
+        recurringFreq: recurring ? freq : null,
+        recurringAutoAdd: autoAdd,
+        nextDueDate,
       },
     });
 
@@ -225,8 +256,6 @@ app.patch('/expenses/:id', requireAuth, async (req, res) => {
 app.delete('/expenses/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-
-    // Verify ownership before deleting
     const existing = await prisma.expense.findFirst({ where: { id, userId: req.userId } });
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
 
@@ -235,6 +264,52 @@ app.delete('/expenses/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete expense' });
+  }
+});
+
+// --- Recurring auto-add cron (runs daily at midnight UTC) ---
+
+cron.schedule('0 0 * * *', async () => {
+  console.log('[cron] Checking recurring expenses...');
+  try {
+    const now = new Date();
+    const due = await prisma.expense.findMany({
+      where: {
+        isRecurring: true,
+        recurringAutoAdd: true,
+        nextDueDate: { lte: now },
+      },
+    });
+
+    for (const e of due) {
+      const newDate = e.nextDueDate;
+      const nextDueDate = calcNextDueDate(newDate, e.recurringFreq);
+
+      // Create new instance
+      await prisma.expense.create({
+        data: {
+          title: e.title,
+          category: e.category,
+          amount: e.amount,
+          date: newDate,
+          userId: e.userId,
+          isRecurring: true,
+          recurringFreq: e.recurringFreq,
+          recurringAutoAdd: true,
+          nextDueDate,
+        },
+      });
+
+      // Advance the original's nextDueDate
+      await prisma.expense.update({
+        where: { id: e.id },
+        data: { nextDueDate },
+      });
+
+      console.log(`[cron] Auto-added recurring expense: ${e.title} for user ${e.userId}`);
+    }
+  } catch (err) {
+    console.error('[cron] Error processing recurring expenses:', err);
   }
 });
 

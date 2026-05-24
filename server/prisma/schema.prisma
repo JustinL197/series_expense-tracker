@@ -17,12 +17,16 @@ model User {
 }
 
 model Expense {
-  id        Int      @id @default(autoincrement())
-  title     String
-  category  String
-  amount    Float
-  date      DateTime @default(now())
-  createdAt DateTime @default(now())
-  userId    Int?
-  user      User?    @relation(fields: [userId], references: [id])
+  id               Int       @id @default(autoincrement())
+  title            String
+  category         String
+  amount           Float
+  date             DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  isRecurring      Boolean   @default(false)
+  recurringFreq    String?
+  recurringAutoAdd Boolean   @default(false)
+  nextDueDate      DateTime?
+  userId           Int?
+  user             User?     @relation(fields: [userId], references: [id])
 }

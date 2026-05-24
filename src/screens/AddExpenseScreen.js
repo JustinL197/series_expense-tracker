@@ -9,6 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import PageDots from '../components/PageDots';
 
 export default function AddExpenseScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +21,9 @@ export default function AddExpenseScreen() {
   const [date, setDate] = useState(new Date());
   const [tempDate, setTempDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurringFreq, setRecurringFreq] = useState('monthly');
+  const [recurringAutoAdd, setRecurringAutoAdd] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [showAddCategory, setShowAddCategory] = useState(false);
@@ -55,11 +59,17 @@ export default function AddExpenseScreen() {
         category,
         amount: parseFloat(amount),
         date: date.toISOString(),
+        isRecurring,
+        recurringFreq: isRecurring ? recurringFreq : null,
+        recurringAutoAdd: isRecurring ? recurringAutoAdd : false,
       });
       setAmount('');
       setTitle('');
       setCategory(null);
       setDate(new Date());
+      setIsRecurring(false);
+      setRecurringFreq('monthly');
+      setRecurringAutoAdd(false);
       Alert.alert('', 'Expense added.');
     } catch (e) {
       Alert.alert('Error', 'Could not save expense.');
@@ -212,7 +222,6 @@ export default function AddExpenseScreen() {
                 value={tempDate}
                 mode="date"
                 display="spinner"
-                maximumDate={new Date()}
                 themeVariant="dark"
                 onChange={(_, selected) => {
                   if (selected) setTempDate(selected);
@@ -231,6 +240,46 @@ export default function AddExpenseScreen() {
           )}
         </View>
 
+        {/* Recurring */}
+        <View style={styles.section}>
+          <View style={styles.recurringRow}>
+            <Text style={styles.sectionLabel}>Recurring</Text>
+            <TouchableOpacity
+              style={[styles.toggleTrack, isRecurring && styles.toggleTrackOn]}
+              onPress={() => setIsRecurring((v) => !v)}
+            >
+              <View style={[styles.toggleThumb, isRecurring && styles.toggleThumbOn]} />
+            </TouchableOpacity>
+          </View>
+
+          {isRecurring && (
+            <>
+              <View style={styles.freqRow}>
+                {['weekly', 'monthly', 'yearly'].map((f) => (
+                  <TouchableOpacity
+                    key={f}
+                    style={[styles.freqPill, recurringFreq === f && styles.freqPillActive]}
+                    onPress={() => setRecurringFreq(f)}
+                  >
+                    <Text style={[styles.freqText, recurringFreq === f && styles.freqTextActive]}>
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.recurringRow}>
+                <Text style={styles.autoAddLabel}>Auto-add on due date</Text>
+                <TouchableOpacity
+                  style={[styles.toggleTrack, recurringAutoAdd && styles.toggleTrackOn]}
+                  onPress={() => setRecurringAutoAdd((v) => !v)}
+                >
+                  <View style={[styles.toggleThumb, recurringAutoAdd && styles.toggleThumbOn]} />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+
         {/* Submit */}
         <TouchableOpacity
           style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
@@ -242,6 +291,8 @@ export default function AddExpenseScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <PageDots activeIndex={1} />
 
       {/* Add category modal */}
       <Modal visible={showAddCategory} animationType="slide" transparent>
@@ -425,6 +476,59 @@ const styles = StyleSheet.create({
   },
   datePillText: {
     color: COLORS.text,
+    fontSize: 14,
+  },
+  recurringRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  toggleTrackOn: {
+    backgroundColor: '#FFFFFF',
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#666666',
+  },
+  toggleThumbOn: {
+    backgroundColor: '#000000',
+    alignSelf: 'flex-end',
+  },
+  freqRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  freqPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1A1A1A',
+  },
+  freqPillActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  freqText: {
+    color: '#888888',
+    fontSize: 13,
+  },
+  freqTextActive: {
+    color: '#000000',
+    fontWeight: '600',
+  },
+  autoAddLabel: {
+    color: '#888888',
     fontSize: 14,
   },
   dateConfirmBtn: {
