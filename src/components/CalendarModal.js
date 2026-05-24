@@ -127,9 +127,16 @@ export default function CalendarModal({ visible, onClose }) {
               <TouchableOpacity onPress={goBack} style={styles.navBtn}>
                 <Text style={styles.navBtnText}>‹</Text>
               </TouchableOpacity>
-              <Text style={styles.monthLabel}>
-                {MONTH_NAMES[month]} {year}
-              </Text>
+              <View style={styles.monthLabelRow}>
+                <Text style={styles.monthLabel}>{MONTH_NAMES[month]} {year}</Text>
+                {loading && (
+                  <ActivityIndicator
+                    size="small"
+                    color={COLORS.subtext}
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+              </View>
               <TouchableOpacity
                 onPress={goForward}
                 style={styles.navBtn}
@@ -146,50 +153,46 @@ export default function CalendarModal({ visible, onClose }) {
               ))}
             </View>
 
-            {/* Grid */}
-            {loading ? (
-              <ActivityIndicator color={COLORS.text} style={{ marginTop: 40 }} />
-            ) : (
-              <View style={styles.grid}>
-                {cells.map((day, i) => {
-                  if (!day) return <View key={`empty-${i}`} style={styles.cell} />;
-                  const total = dailyTotal(day);
-                  const isToday =
-                    day === today.getDate() &&
-                    month === today.getMonth() &&
-                    year === today.getFullYear();
-                  const isSelected = selectedDay === day;
-                  const hasSpend = total > 0;
+            {/* Grid — always rendered so layout never jumps; amounts appear once loaded */}
+            <View style={styles.grid}>
+              {cells.map((day, i) => {
+                if (!day) return <View key={`empty-${i}`} style={styles.cell} />;
+                const total = dailyTotal(day);
+                const isToday =
+                  day === today.getDate() &&
+                  month === today.getMonth() &&
+                  year === today.getFullYear();
+                const isSelected = selectedDay === day;
+                const hasSpend = !loading && total > 0;
 
-                  return (
-                    <TouchableOpacity
-                      key={day}
-                      style={[
-                        styles.cell,
-                        isSelected && styles.cellSelected,
-                        isToday && !isSelected && styles.cellToday,
-                      ]}
-                      onPress={() => setSelectedDay(isSelected ? null : day)}
-                      disabled={!hasSpend}
-                    >
-                      <Text style={[
-                        styles.cellDay,
-                        isSelected && styles.cellDaySelected,
-                        isToday && !isSelected && styles.cellDayToday,
-                        !hasSpend && styles.cellDayEmpty,
-                      ]}>
-                        {day}
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    style={[
+                      styles.cell,
+                      isSelected && styles.cellSelected,
+                      isToday && !isSelected && styles.cellToday,
+                    ]}
+                    onPress={() => setSelectedDay(isSelected ? null : day)}
+                    disabled={!hasSpend}
+                  >
+                    <Text style={[
+                      styles.cellDay,
+                      isSelected && styles.cellDaySelected,
+                      isToday && !isSelected && styles.cellDayToday,
+                      !hasSpend && styles.cellDayEmpty,
+                    ]}>
+                      {day}
+                    </Text>
+                    {hasSpend && (
+                      <Text style={[styles.cellAmount, isSelected && styles.cellAmountSelected]}>
+                        ${total % 1 === 0 ? total : total.toFixed(0)}
                       </Text>
-                      {hasSpend && (
-                        <Text style={[styles.cellAmount, isSelected && styles.cellAmountSelected]}>
-                          ${total % 1 === 0 ? total : total.toFixed(0)}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )}
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
 
             {/* Selected day transactions */}
             {selectedDay && (
@@ -271,6 +274,10 @@ const styles = StyleSheet.create({
   },
   navBtnDisabled: {
     color: COLORS.border,
+  },
+  monthLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   monthLabel: {
     color: COLORS.text,

@@ -12,6 +12,14 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const APPLE_BUNDLE_ID = process.env.APPLE_BUNDLE_ID;
 
+const DEFAULT_CATEGORIES = [
+  { label: 'Food', emoji: '🍔' },
+  { label: 'Bills', emoji: '💸' },
+  { label: 'Streaming Services', emoji: '📺' },
+  { label: 'Rent', emoji: '🏠' },
+  { label: 'Leisure', emoji: '🎉' },
+];
+
 app.use(cors());
 app.use(express.json());
 
@@ -60,7 +68,11 @@ app.post('/auth/apple', async (req, res) => {
     const user = await prisma.user.upsert({
       where: { appleId },
       update: {},
-      create: { appleId, email: email ?? null },
+      create: {
+        appleId,
+        email: email ?? null,
+        categories: JSON.stringify(DEFAULT_CATEGORIES),
+      },
     });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });

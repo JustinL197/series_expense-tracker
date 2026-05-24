@@ -242,15 +242,14 @@ export default function AddExpenseScreen() {
 
         {/* Recurring */}
         <View style={styles.section}>
-          <View style={styles.recurringRow}>
-            <Text style={styles.sectionLabel}>Recurring</Text>
-            <TouchableOpacity
-              style={[styles.toggleTrack, isRecurring && styles.toggleTrackOn]}
-              onPress={() => setIsRecurring((v) => !v)}
-            >
-              <View style={[styles.toggleThumb, isRecurring && styles.toggleThumbOn]} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[styles.recurringPill, isRecurring && styles.recurringPillOn]}
+            onPress={() => setIsRecurring((v) => !v)}
+          >
+            <Text style={[styles.recurringPillText, isRecurring && styles.recurringPillTextOn]}>
+              ↻  Recurring  ·  {isRecurring ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
 
           {isRecurring && (
             <>
@@ -477,6 +476,27 @@ const styles = StyleSheet.create({
   datePillText: {
     color: COLORS.text,
     fontSize: 14,
+  },
+  recurringPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: '#1C1C1C',
+    marginBottom: 14,
+  },
+  recurringPillOn: {
+    backgroundColor: '#FFFFFF',
+  },
+  recurringPillText: {
+    color: '#555555',
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  recurringPillTextOn: {
+    color: '#000000',
+    fontWeight: '600',
   },
   recurringRow: {
     flexDirection: 'row',
