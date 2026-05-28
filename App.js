@@ -8,7 +8,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { CategoriesProvider } from './src/context/CategoriesContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { setAuthToken } from './src/api/expenses';
+import { setAuthToken, setOnUnauthorized } from './src/api/expenses';
 import SummaryScreen from './src/screens/SummaryScreen';
 import AddExpenseScreen from './src/screens/AddExpenseScreen';
 import ExpenseListScreen from './src/screens/ExpenseListScreen';
@@ -18,11 +18,12 @@ import AnimatedPageDots from './src/components/AnimatedPageDots';
 const Tab = createMaterialTopTabNavigator();
 
 function AppNavigator() {
-  const { token } = useAuth();
+  const { token, signOut } = useAuth();
 
   // Set synchronously so CategoriesProvider has the token available
   // the moment it mounts — a useEffect would be too late.
   setAuthToken(token ?? null);
+  setOnUnauthorized(signOut);
 
   // token === undefined means SecureStore hasn't resolved yet — render nothing
   if (token === undefined) return null;

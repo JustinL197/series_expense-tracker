@@ -1,9 +1,14 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 let _token = null;
+let _onUnauthorized = null;
 
 export function setAuthToken(token) {
   _token = token;
+}
+
+export function setOnUnauthorized(fn) {
+  _onUnauthorized = fn;
 }
 
 async function request(path, options = {}) {
@@ -16,6 +21,10 @@ async function request(path, options = {}) {
     },
     ...options,
   });
+  if (res.status === 401) {
+    _onUnauthorized?.();
+    throw new Error(`Unauthorized: ${options.method || 'GET'} ${url}`);
+  }
   if (!res.ok) throw new Error(`Request failed: ${res.status} ${options.method || 'GET'} ${url}`);
   return res.json();
 }
