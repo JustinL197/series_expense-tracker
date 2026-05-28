@@ -20,21 +20,26 @@ async function request(path, options = {}) {
   return res.json();
 }
 
-// Calculate range start in the user's LOCAL timezone so "today" is always correct
-// regardless of what UTC time the server thinks it is.
-function localRangeFrom(range) {
+// Calculate range bounds in the user's LOCAL timezone.
+// Returns { from, to? } as ISO strings.
+export function localRangeBounds(range) {
   const now = new Date();
   const from = new Date(now);
   if (range === 'day') {
     from.setHours(0, 0, 0, 0);
   } else if (range === 'week') {
-    from.setDate(now.getDate() - 7);
+    // Sun–Sat calendar week
+    from.setDate(now.getDate() - now.getDay());
     from.setHours(0, 0, 0, 0);
   } else if (range === 'month') {
     from.setDate(1);
     from.setHours(0, 0, 0, 0);
   }
-  return from.toISOString();
+  return { from: from.toISOString() };
+}
+
+function localRangeFrom(range) {
+  return localRangeBounds(range).from;
 }
 
 export const api = {
@@ -53,6 +58,7 @@ export const api = {
     const to = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
     return request(`/expenses?from=${from}&to=${to}`);
   },
+  getLatestExpenseDate: () => request('/expenses/latest-date'),
   getCategories: () => request('/categories'),
   saveCategories: (categories) => request('/categories', { method: 'PUT', body: JSON.stringify({ categories }) }),
   addExpense: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Modal, TouchableOpacity,
+  View, Text, StyleSheet, Modal, TouchableOpacity, Pressable,
   ActivityIndicator, ScrollView, Dimensions,
 } from 'react-native';
 
@@ -26,6 +26,7 @@ export default function CalendarModal({ visible, onClose }) {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [maxExpenseDate, setMaxExpenseDate] = useState(null);
   const cache = useRef({});
 
   const load = useCallback(async () => {
@@ -49,11 +50,13 @@ export default function CalendarModal({ visible, onClose }) {
     }
   }, [year, month]);
 
-  // When modal opens, always bust the cache for the current month
-  // so newly added expenses show up without restarting the app.
+  // When modal opens: bust current-month cache + fetch latest expense date for nav cap
   useEffect(() => {
     if (visible) {
       delete cache.current[`${year}-${month}`];
+      api.getLatestExpenseDate()
+        .then(({ date }) => { if (date) setMaxExpenseDate(new Date(date)); })
+        .catch(() => {});
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -87,9 +90,12 @@ export default function CalendarModal({ visible, onClose }) {
     else setMonth(m => m - 1);
   };
 
+  // The forward nav cap is the month of the latest expense (or current month if none)
+  const navCapDate = maxExpenseDate ?? today;
+  const isAtNavCap = year === navCapDate.getFullYear() && month === navCapDate.getMonth();
+
   const goForward = () => {
-    const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
-    if (isCurrentMonth) return;
+    if (isAtNavCap) return;
     if (month === 11) { setMonth(0); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   };
@@ -106,8 +112,8 @@ export default function CalendarModal({ visible, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
-        <View style={styles.sheet}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
 
           {/* Header */}
           <View style={styles.sheetHeader}>
@@ -140,9 +146,9 @@ export default function CalendarModal({ visible, onClose }) {
               <TouchableOpacity
                 onPress={goForward}
                 style={styles.navBtn}
-                disabled={isCurrentMonth}
+                disabled={isAtNavCap}
               >
-                <Text style={[styles.navBtnText, isCurrentMonth && styles.navBtnDisabled]}>›</Text>
+                <Text style={[styles.navBtnText, isAtNavCap && styles.navBtnDisabled]}>›</Text>
               </TouchableOpacity>
             </View>
 
@@ -194,6 +200,16 @@ export default function CalendarModal({ visible, onClose }) {
               })}
             </View>
 
+            {/* Monthly total — bottom right below the grid */}
+            {!loading && expenses.length > 0 && (
+              <View style={styles.monthTotalRow}>
+                <Text style={styles.monthTotalLabel}>Total</Text>
+                <Text style={styles.monthTotalAmount}>
+                  ${expenses.reduce((s, e) => s + e.amount, 0).toFixed(2)}
+                </Text>
+              </View>
+            )}
+
             {/* Selected day transactions */}
             {selectedDay && (
               <View style={styles.dayDetail}>
@@ -217,8 +233,8 @@ export default function CalendarModal({ visible, onClose }) {
               </View>
             )}
           </ScrollView>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -336,6 +352,25 @@ const styles = StyleSheet.create({
   },
   cellAmountSelected: {
     color: COLORS.background,
+  },
+  monthTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    paddingTop: 10,
+    paddingBottom: 4,
+    paddingHorizontal: 4,
+  },
+  monthTotalLabel: {
+    color: COLORS.subtext,
+    fontSize: 12,
+    letterSpacing: 0.5,
+  },
+  monthTotalAmount: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '500',
   },
   dayDetail: {
     marginTop: 24,

@@ -3,6 +3,7 @@ import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts, Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import { NavigationContainer } from '@react-navigation/native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { CategoriesProvider } from './src/context/CategoriesContext';
@@ -12,6 +13,7 @@ import SummaryScreen from './src/screens/SummaryScreen';
 import AddExpenseScreen from './src/screens/AddExpenseScreen';
 import ExpenseListScreen from './src/screens/ExpenseListScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import AnimatedPageDots from './src/components/AnimatedPageDots';
 
 const Tab = createMaterialTopTabNavigator();
 
@@ -33,8 +35,8 @@ function AppNavigator() {
         <Tab.Navigator
           initialRouteName="Add"
           tabBarPosition="bottom"
+          tabBar={(props) => <AnimatedPageDots {...props} />}
           screenOptions={{
-            tabBarStyle: { display: 'none' },
             swipeEnabled: true,
             animationEnabled: true,
             lazy: false,
@@ -50,6 +52,9 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium });
+  if (!fontsLoaded) return null;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

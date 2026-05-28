@@ -122,7 +122,10 @@ app.get('/expenses', requireAuth, async (req, res) => {
       const now = new Date();
       const from = new Date();
       if (range === 'day') from.setHours(0, 0, 0, 0);
-      else if (range === 'week') from.setDate(now.getDate() - 7);
+      else if (range === 'week') {
+        from.setDate(now.getDate() - now.getDay()); // back to Sunday
+        from.setHours(0, 0, 0, 0);
+      }
       else if (range === 'month') from.setDate(1), from.setHours(0, 0, 0, 0);
       where.date = { gte: from };
     }
@@ -151,6 +154,21 @@ app.get('/expenses', requireAuth, async (req, res) => {
   }
 });
 
+// GET /expenses/latest-date — returns the latest expense date for the user (including future)
+app.get('/expenses/latest-date', requireAuth, async (req, res) => {
+  try {
+    const latest = await prisma.expense.findFirst({
+      where: { userId: req.userId },
+      orderBy: { date: 'desc' },
+      select: { date: true },
+    });
+    res.json({ date: latest?.date ?? null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch latest date' });
+  }
+});
+
 // GET /expenses/summary
 app.get('/expenses/summary', requireAuth, async (req, res) => {
   try {
@@ -162,7 +180,10 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
     } else {
       from = new Date();
       if (range === 'day') from.setHours(0, 0, 0, 0);
-      else if (range === 'week') from.setDate(from.getDate() - 7);
+      else if (range === 'week') {
+        from.setDate(from.getDate() - from.getDay()); // back to Sunday
+        from.setHours(0, 0, 0, 0);
+      }
       else if (range === 'month') from.setDate(1), from.setHours(0, 0, 0, 0);
       else from.setFullYear(2000);
     }
@@ -170,9 +191,10 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
     const dateFilter = { gte: from };
     if (toParam) dateFilter.lte = new Date(toParam);
 
-    // Exclude future expenses from summary totals
-    const now = new Date();
-    if (!dateFilter.lte || dateFilter.lte > now) dateFilter.lte = now;
+    // Exclude expenses beyond today from summary totals (but include all of today)
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    if (!dateFilter.lte || dateFilter.lte > endOfToday) dateFilter.lte = endOfToday;
 
     const expenses = await prisma.expense.findMany({
       where: { userId: req.userId, date: dateFilter },

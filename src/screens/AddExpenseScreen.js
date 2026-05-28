@@ -1,15 +1,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TouchableOpacity, Pressable, TextInput,
   KeyboardAvoidingView, Platform, Alert, ScrollView, Keyboard, Modal,
   Animated,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
-import PageDots from '../components/PageDots';
+
+const CHANGELOG = [
+  {
+    version: '1.2.0',
+    items: [
+      'Tap a category in Summary to see a full breakdown of its expenses',
+      'Budget bar now visible even with no expenses recorded',
+      'Delete expense directly from the edit panel',
+      'Tap outside any modal to dismiss it',
+      'Smooth animated page indicator between screens',
+      'Calendar navigation capped at your latest expense date',
+      'Monthly total now shown in calendar view',
+      'Fixed: today\'s expenses now correctly count toward today\'s total',
+      'Fixed: week range is now Sun–Sat, not a rolling 7 days',
+    ],
+  },
+];
+
 
 export default function AddExpenseScreen() {
   const insets = useSafeAreaInsets();
@@ -23,9 +41,9 @@ export default function AddExpenseScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFreq, setRecurringFreq] = useState('monthly');
-  const [recurringAutoAdd, setRecurringAutoAdd] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [showChangelog, setShowChangelog] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryEmoji, setNewCategoryEmoji] = useState('');
@@ -61,7 +79,7 @@ export default function AddExpenseScreen() {
         date: date.toISOString(),
         isRecurring,
         recurringFreq: isRecurring ? recurringFreq : null,
-        recurringAutoAdd: isRecurring ? recurringAutoAdd : false,
+        recurringAutoAdd: isRecurring,
       });
       setAmount('');
       setTitle('');
@@ -69,7 +87,6 @@ export default function AddExpenseScreen() {
       setDate(new Date());
       setIsRecurring(false);
       setRecurringFreq('monthly');
-      setRecurringAutoAdd(false);
       Alert.alert('', 'Expense added.');
     } catch (e) {
       Alert.alert('Error', 'Could not save expense.');
@@ -109,6 +126,16 @@ export default function AddExpenseScreen() {
         keyboardDismissMode="on-drag"
         onScrollBeginDrag={Keyboard.dismiss}
       >
+        {/* Screen header */}
+        <View style={styles.screenHeader}>
+          <TouchableOpacity
+            onPress={() => setShowChangelog(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="information-circle-outline" size={20} color={COLORS.subtext} />
+          </TouchableOpacity>
+        </View>
+
         {/* Amount */}
         <View style={styles.amountBlock}>
           <Text style={styles.amountCurrency}>$</Text>
@@ -266,15 +293,6 @@ export default function AddExpenseScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <View style={styles.recurringRow}>
-                <Text style={styles.autoAddLabel}>Auto-add on due date</Text>
-                <TouchableOpacity
-                  style={[styles.toggleTrack, recurringAutoAdd && styles.toggleTrackOn]}
-                  onPress={() => setRecurringAutoAdd((v) => !v)}
-                >
-                  <View style={[styles.toggleThumb, recurringAutoAdd && styles.toggleThumbOn]} />
-                </TouchableOpacity>
-              </View>
             </>
           )}
         </View>
@@ -291,15 +309,38 @@ export default function AddExpenseScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      <PageDots activeIndex={1} />
+      {/* Changelog modal */}
+      <Modal visible={showChangelog} animationType="slide" transparent>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowChangelog(false)}>
+          <Pressable style={styles.changelogSheet} onPress={() => {}}>
+            <View style={styles.changelogHeader}>
+              <Text style={styles.changelogTitle}>What's New</Text>
+              <TouchableOpacity onPress={() => setShowChangelog(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={20} color={COLORS.subtext} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {CHANGELOG.map((release) => (
+                <View key={release.version} style={styles.changelogRelease}>
+                  <Text style={styles.changelogVersion}>v{release.version}</Text>
+                  {release.items.map((item, i) => (
+                    <View key={i} style={styles.changelogItem}>
+                      <Text style={styles.changelogBullet}>·</Text>
+                      <Text style={styles.changelogItemText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Add category modal */}
       <Modal visible={showAddCategory} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalSheet}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={styles.modalOverlay} onPress={() => { setNewCategoryName(''); setNewCategoryEmoji(''); setShowAddCategory(false); }}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>New Category</Text>
 
             <Text style={styles.modalLabel}>Name</Text>
@@ -310,7 +351,7 @@ export default function AddExpenseScreen() {
               value={newCategoryName}
               onChangeText={setNewCategoryName}
               autoFocus
-              maxLength={20}
+              maxLength={30}
               returnKeyType="next"
             />
 
@@ -344,7 +385,8 @@ export default function AddExpenseScreen() {
                 <Text style={styles.modalSaveText}>Add</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Pressable>
+        </Pressable>
         </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
@@ -498,33 +540,6 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontWeight: '600',
   },
-  recurringRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  toggleTrack: {
-    width: 44,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#2A2A2A',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  toggleTrackOn: {
-    backgroundColor: '#FFFFFF',
-  },
-  toggleThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#666666',
-  },
-  toggleThumbOn: {
-    backgroundColor: '#000000',
-    alignSelf: 'flex-end',
-  },
   freqRow: {
     flexDirection: 'row',
     gap: 8,
@@ -546,10 +561,6 @@ const styles = StyleSheet.create({
   freqTextActive: {
     color: '#000000',
     fontWeight: '600',
-  },
-  autoAddLabel: {
-    color: '#888888',
-    fontSize: 14,
   },
   dateConfirmBtn: {
     alignSelf: 'center',
@@ -645,5 +656,61 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontSize: 15,
     fontWeight: '600',
+  },
+  screenHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 4,
+  },
+  brandingText: {
+    fontFamily: 'Inter_400Regular',
+    color: COLORS.subtext,
+    fontSize: 12,
+    letterSpacing: 0.2,
+  },
+  changelogSheet: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 28,
+    paddingBottom: 48,
+    maxHeight: '80%',
+  },
+  changelogHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  changelogTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  changelogRelease: {
+    marginBottom: 28,
+  },
+  changelogVersion: {
+    color: COLORS.subtext,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 14,
+  },
+  changelogItem: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  changelogBullet: {
+    color: COLORS.subtext,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  changelogItemText: {
+    color: COLORS.text,
+    fontSize: 14,
+    lineHeight: 22,
+    flex: 1,
   },
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Series Expense",
     "slug": "series-expense",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.justin.expensetracker",
-      "buildNumber": "4",
+      "buildNumber": "5",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default"
@@ -38,7 +38,8 @@
     "plugins": [
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-font"
     ],
     "extra": {
       "eas": {

@@ -4,6 +4,32 @@ All builds of Series Expense, newest first.
 
 ---
 
+## Build 7 — 2026-05-28 — v1.2.0
+
+### New
+- Tap any category in the Summary breakdown to drill into its expenses for the selected range
+- Budget section always visible on Summary, even when no expenses have been recorded yet
+- Delete expense directly from the edit panel — trash icon in the modal header
+- Tap outside any modal to dismiss it (all screens)
+- Calendar forward navigation capped at the month of the latest expense — no infinite future scrolling
+- Monthly total shown below the calendar grid
+- Recurring expenses are always auto-added on their due date — manual/automatic toggle removed in favour of a single sensible default
+- In-app changelog accessible via ⓘ icon on the Add screen
+
+### Changed
+- Page indicator now animates in real time during swipes (hybrid native/JS driver — opacity follows finger, width springs on release)
+- Category name character limit increased from 20 → 30 characters
+- Future-dated expenses are now allowed; upcoming expenses are labelled and excluded from period totals
+- Delete expense moved from long-press hold into the edit modal
+
+### Fixed
+- Today's expenses were appearing as "upcoming" and not counting toward the Today total — date comparison now uses end-of-local-day rather than the UTC moment
+- Weekly range corrected to Sun–Sat calendar week (was a rolling 7-day window from the current moment)
+- Swipe-right navigation back to Summary was blocked on the Expenses screen due to gesture handler conflict — resolved by restricting swipeable activation to left-only swipes
+- Category drill-down header text now aligns correctly with expense row text
+
+---
+
 ## Build 6 — 2026-05-22
 
 ### New

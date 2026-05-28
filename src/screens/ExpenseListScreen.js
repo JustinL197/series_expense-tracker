@@ -1,16 +1,16 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Pressable,
   Alert, ActivityIndicator, Modal, TextInput, KeyboardAvoidingView,
   Platform, ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
-import { api } from '../api/expenses';
+import { api, localRangeBounds } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
-import PageDots from '../components/PageDots';
 
 const DATE_FILTERS = [
   { label: 'All time', value: null },
@@ -50,7 +50,6 @@ export default function ExpenseListScreen() {
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [editIsRecurring, setEditIsRecurring] = useState(false);
   const [editRecurringFreq, setEditRecurringFreq] = useState('monthly');
-  const [editRecurringAutoAdd, setEditRecurringAutoAdd] = useState(false);
 
   const dateFilterRef = useRef(null);
   const categoryFilterRef = useRef(null);
@@ -60,7 +59,10 @@ export default function ExpenseListScreen() {
   const load = useCallback(async (dateF, categoryF, recurringF, upcomingF) => {
     try {
       const params = {};
-      if (dateF) params.range = dateF;
+      if (dateF) {
+        const { from } = localRangeBounds(dateF);
+        params.from = from;
+      }
       if (categoryF) params.category = categoryF;
       if (recurringF) params.recurring = 'true';
       if (upcomingF) params.upcoming = 'true';
@@ -106,6 +108,7 @@ export default function ExpenseListScreen() {
   };
 
   const handleDelete = (id) => {
+    setEditTarget(null);
     Alert.alert('Delete', 'Remove this expense?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -129,7 +132,6 @@ export default function ExpenseListScreen() {
     setEditTempDate(d);
     setEditIsRecurring(expense.isRecurring || false);
     setEditRecurringFreq(expense.recurringFreq || 'monthly');
-    setEditRecurringAutoAdd(expense.recurringAutoAdd || false);
   };
 
   const handleSaveEdit = async () => {
@@ -141,7 +143,7 @@ export default function ExpenseListScreen() {
         date: editDate.toISOString(),
         isRecurring: editIsRecurring,
         recurringFreq: editIsRecurring ? editRecurringFreq : null,
-        recurringAutoAdd: editIsRecurring ? editRecurringAutoAdd : false,
+        recurringAutoAdd: editIsRecurring,
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
@@ -152,8 +154,9 @@ export default function ExpenseListScreen() {
 
   const formatDate = (iso) => {
     const d = new Date(iso);
-    const now = new Date();
-    const isUpcoming = d > now;
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const isUpcoming = d > endOfToday;
     return {
       text: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       upcoming: isUpcoming,
@@ -183,7 +186,7 @@ export default function ExpenseListScreen() {
         key={item.id}
         style={styles.row}
         onPress={() => openEdit(item)}
-        onLongPress={() => handleDelete(item.id)}
+        activeOpacity={0.7}
       >
         <View style={styles.rowLeft}>
           <Text style={styles.rowEmoji}>{getCategoryEmoji(item.category)}</Text>
@@ -287,12 +290,10 @@ export default function ExpenseListScreen() {
         </View>
       ) : viewMode === 'all' ? renderAllView() : renderCategoryView()}
 
-      <PageDots activeIndex={2} />
-
       {/* Filter sheet */}
       <Modal visible={showFilterSheet} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterSheet(false)}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
             <View style={styles.sheetHeader}>
               <Text style={styles.modalTitle}>Filter</Text>
               <TouchableOpacity onPress={clearFilters}>
@@ -363,16 +364,24 @@ export default function ExpenseListScreen() {
                 <Text style={styles.modalSaveText}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Edit modal */}
       <Modal visible={!!editTarget} animationType="slide" transparent>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalSheet}>
-              <Text style={styles.modalTitle}>Edit Expense</Text>
+          <Pressable style={styles.modalOverlay} onPress={() => { setEditTarget(null); setShowEditDatePicker(false); }}>
+            <Pressable style={styles.modalSheet} onPress={() => {}}>
+              <View style={styles.editModalHeader}>
+                <Text style={styles.modalTitle}>Edit Expense</Text>
+                <TouchableOpacity
+                  onPress={() => handleDelete(editTarget.id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
               <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
 
                 <Text style={styles.modalLabel}>Amount</Text>
@@ -457,15 +466,6 @@ export default function ExpenseListScreen() {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View style={styles.recurringRow}>
-                      <Text style={styles.autoAddLabel}>Auto-add on due date</Text>
-                      <TouchableOpacity
-                        style={[styles.toggleTrack, editRecurringAutoAdd && styles.toggleTrackOn]}
-                        onPress={() => setEditRecurringAutoAdd((v) => !v)}
-                      >
-                        <View style={[styles.toggleThumb, editRecurringAutoAdd && styles.toggleThumbOn]} />
-                      </TouchableOpacity>
-                    </View>
                   </>
                 )}
 
@@ -481,8 +481,8 @@ export default function ExpenseListScreen() {
                   </TouchableOpacity>
                 </View>
               </ScrollView>
-            </View>
-          </View>
+            </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -599,6 +599,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 15,
     fontWeight: '500',
+  },
+  editModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -790,10 +796,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     marginBottom: 14,
-  },
-  autoAddLabel: {
-    color: COLORS.subtext,
-    fontSize: 14,
   },
   modalActions: {
     flexDirection: 'row',

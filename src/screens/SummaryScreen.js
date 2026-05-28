@@ -1,16 +1,15 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
-  Modal, TextInput, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TouchableOpacity, Pressable, ActivityIndicator,
+  Modal, TextInput, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
-import { api } from '../api/expenses';
+import { api, localRangeBounds } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
 import CalendarModal from '../components/CalendarModal';
-import PageDots from '../components/PageDots';
 
 const RANGES = ['day', 'week', 'month'];
 const RANGE_LABELS = { day: 'Today', week: 'This Week', month: 'This Month' };
@@ -80,8 +79,26 @@ export default function SummaryScreen() {
     setBudgetInput('');
   };
 
+  const budgetInputRef = useRef(null);
+  const [catModal, setCatModal] = useState({ visible: false, category: null, expenses: [], loading: false });
+
   const getCategoryEmoji = (label) =>
     allCategories.find((c) => c.label === label)?.emoji ?? '';
+
+  const openCategoryExpenses = async (cat) => {
+    setCatModal({ visible: true, category: cat, expenses: [], loading: true });
+    try {
+      const { from } = localRangeBounds(range);
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      const data = await api.getExpenses({ from, category: cat });
+      // Exclude future-dated expenses from the drill-down
+      const filtered = data.filter((e) => new Date(e.date) <= endOfToday);
+      setCatModal((prev) => ({ ...prev, expenses: filtered, loading: false }));
+    } catch {
+      setCatModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 24 }]}>
@@ -122,80 +139,133 @@ export default function SummaryScreen() {
 
           <CalendarModal visible={showCalendar} onClose={() => setShowCalendar(false)} />
 
-          {summary?.byCategory && Object.keys(summary.byCategory).length > 0 && (
-            <View style={styles.breakdown}>
-              {currentBudget == null && (
+          {/* Budget — always visible regardless of whether there are expenses */}
+          <View style={styles.breakdown}>
+            {currentBudget == null ? (
+              <>
                 <TouchableOpacity onPress={openBudgetModal} style={styles.setBudgetBtn}>
                   <Text style={styles.setBudgetText}>
                     Set {BUDGET_LABELS[range]} budget
                   </Text>
                 </TouchableOpacity>
-              )}
-              {currentBudget != null ? (
-                <>
-                  <View style={styles.budgetRow}>
-                    <Text style={[styles.budgetDiff, isOver ? styles.over : styles.under]}>
-                      {isOver
-                        ? `$${Math.abs(diff).toFixed(2)} over`
-                        : `$${diff.toFixed(2)} remaining`}
-                    </Text>
-                    <TouchableOpacity onPress={openBudgetModal}>
-                      <Text style={styles.budgetLabel}>
-                        ${currentBudget.toFixed(2)} budget
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.progressTrack}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${progress * 100}%` },
-                        isOver && styles.progressFillOver,
-                      ]}
-                    />
-                  </View>
-                </>
-              ) : (
                 <View style={styles.staticDivider} />
-              )}
-              <Text style={styles.breakdownHeader}>By Category</Text>
-              {Object.entries(summary.byCategory)
-                .sort(([, a], [, b]) => b - a)
-                .map(([cat, amount]) => (
-                  <View key={cat} style={styles.breakdownRow}>
-                    <Text style={styles.breakdownEmoji}>{getCategoryEmoji(cat)}</Text>
-                    <Text style={styles.breakdownLabel}>{cat}</Text>
-                    <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
-                  </View>
-                ))}
-            </View>
-          )}
+              </>
+            ) : (
+              <>
+                <View style={styles.budgetRow}>
+                  <Text style={[styles.budgetDiff, isOver ? styles.over : styles.under]}>
+                    {isOver
+                      ? `$${Math.abs(diff).toFixed(2)} over`
+                      : `$${diff.toFixed(2)} remaining`}
+                  </Text>
+                  <TouchableOpacity onPress={openBudgetModal}>
+                    <Text style={styles.budgetLabel}>
+                      ${currentBudget.toFixed(2)} budget
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${progress * 100}%` },
+                      isOver && styles.progressFillOver,
+                    ]}
+                  />
+                </View>
+              </>
+            )}
+
+            {/* Category breakdown — only when there are expenses */}
+            {summary?.byCategory && Object.keys(summary.byCategory).length > 0 && (
+              <>
+                <Text style={styles.breakdownHeader}>By Category</Text>
+                {Object.entries(summary.byCategory)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([cat, amount]) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={styles.breakdownRow}
+                      onPress={() => openCategoryExpenses(cat)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.breakdownEmoji}>{getCategoryEmoji(cat)}</Text>
+                      <Text style={styles.breakdownLabel}>{cat}</Text>
+                      <Text style={styles.breakdownAmount}>${amount.toFixed(2)}</Text>
+                      <Text style={styles.breakdownChevron}>›</Text>
+                    </TouchableOpacity>
+                  ))}
+              </>
+            )}
+          </View>
         </>
       )}
 
-      <PageDots activeIndex={0} />
+      {/* Category expenses modal */}
+      <Modal visible={catModal.visible} animationType="slide" transparent>
+        <Pressable style={styles.modalOverlay} onPress={() => setCatModal((prev) => ({ ...prev, visible: false }))}>
+          <Pressable style={[styles.modalSheet, styles.catModalSheet]} onPress={() => {}}>
+            <View style={styles.catModalHeader}>
+              <View style={styles.catModalTitleGroup}>
+                {getCategoryEmoji(catModal.category) ? (
+                  <Text style={styles.catModalEmoji}>{getCategoryEmoji(catModal.category)}</Text>
+                ) : null}
+                <Text style={styles.catModalTitle}>{catModal.category}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setCatModal((prev) => ({ ...prev, visible: false }))}>
+                <Text style={styles.catModalDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            {catModal.loading ? (
+              <ActivityIndicator color={COLORS.text} style={{ marginTop: 24 }} />
+            ) : catModal.expenses.length === 0 ? (
+              <Text style={styles.catEmpty}>No expenses</Text>
+            ) : (
+              <>
+                <View style={styles.catTopDivider} />
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {catModal.expenses.map((e) => (
+                    <View key={e.id} style={styles.catExpenseRow}>
+                      <View style={styles.catExpenseLeft}>
+                        <Text style={styles.catExpenseTitle}>{e.title}</Text>
+                        <Text style={styles.catExpenseDate}>
+                          {new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </Text>
+                      </View>
+                      <Text style={styles.catExpenseAmount}>${e.amount.toFixed(2)}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
-      <Modal visible={showBudgetModal} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.modalSheet}>
+      <Modal
+        visible={showBudgetModal}
+        animationType="none"
+        transparent
+        onShow={() => budgetInputRef.current?.focus()}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={styles.modalOverlay} onPress={() => { setShowBudgetModal(false); setBudgetInput(''); }}>
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>
               {RANGE_LABELS[range]} Budget
             </Text>
 
             <Text style={styles.modalLabel}>Amount</Text>
             <TextInput
+              ref={budgetInputRef}
               style={styles.modalInput}
               keyboardType="decimal-pad"
-              placeholder="0.00"
+              placeholder="0"
               placeholderTextColor={COLORS.subtext}
               value={budgetInput}
               onChangeText={(v) => {
                 if (/^\d*\.?\d{0,2}$/.test(v)) setBudgetInput(v);
               }}
-              autoFocus
               maxLength={8}
             />
 
@@ -216,7 +286,8 @@ export default function SummaryScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -362,6 +433,75 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   breakdownAmount: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  breakdownChevron: {
+    color: COLORS.subtext,
+    fontSize: 18,
+    marginLeft: 8,
+  },
+  catModalSheet: {
+    maxHeight: '70%',
+  },
+  catModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  catModalTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  catModalEmoji: {
+    fontSize: 22,
+    lineHeight: 28,
+  },
+  catModalTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  catModalDone: {
+    color: COLORS.subtext,
+    fontSize: 15,
+  },
+  catTopDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginBottom: 0,
+  },
+  catEmpty: {
+    color: COLORS.subtext,
+    fontSize: 15,
+    textAlign: 'center',
+    marginTop: 24,
+  },
+  catExpenseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  catExpenseLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  catExpenseTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  catExpenseDate: {
+    color: COLORS.subtext,
+    fontSize: 12,
+  },
+  catExpenseAmount: {
     color: COLORS.text,
     fontSize: 15,
     fontWeight: '500',
