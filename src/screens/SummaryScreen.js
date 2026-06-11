@@ -9,12 +9,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api, localRangeBounds } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import { syncWidget } from '../utils/widgetSync';
 import CalendarModal from '../components/CalendarModal';
 
-const RANGES = ['day', 'week', 'month'];
-const RANGE_LABELS = { day: 'Today', week: 'This Week', month: 'This Month' };
-const BUDGET_LABELS = { day: 'daily', week: 'weekly', month: 'monthly' };
-const BUDGET_KEYS = { day: 'budget_day', week: 'budget_week', month: 'budget_month' };
+const RANGES = ['day', 'week', 'biweek', 'month'];
+const RANGE_LABELS = { day: 'Today', week: 'This Week', biweek: 'Biweekly', month: 'This Month' };
+const BUDGET_LABELS = { day: 'daily', week: 'weekly', biweek: 'biweekly', month: 'monthly' };
+const BUDGET_KEYS = { day: 'budget_day', week: 'budget_week', biweek: 'budget_biweek', month: 'budget_month' };
 
 export default function SummaryScreen() {
   const insets = useSafeAreaInsets();
@@ -23,19 +24,19 @@ export default function SummaryScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [budgets, setBudgets] = useState({ day: null, week: null, month: null });
+  const [budgets, setBudgets] = useState({ day: null, week: null, biweek: null, month: null });
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
 
   useEffect(() => {
     Promise.all(
       RANGES.map((r) => AsyncStorage.getItem(BUDGET_KEYS[r]))
-    ).then(([day, week, month]) => {
-      setBudgets({
-        day: day ? parseFloat(day) : null,
-        week: week ? parseFloat(week) : null,
-        month: month ? parseFloat(month) : null,
-      });
+    ).then((values) => {
+      setBudgets(
+        Object.fromEntries(
+          RANGES.map((r, i) => [r, values[i] ? parseFloat(values[i]) : null])
+        )
+      );
     });
   }, []);
 
@@ -51,7 +52,10 @@ export default function SummaryScreen() {
     }
   }, [range]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    load();
+    syncWidget();
+  }, [load]));
 
   const currentBudget = budgets[range];
   const spent = summary?.total ?? 0;
@@ -309,6 +313,7 @@ const styles = StyleSheet.create({
   },
   rangeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 48,
   },

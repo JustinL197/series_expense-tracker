@@ -10,8 +10,19 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import { syncWidget } from '../utils/widgetSync';
 
 const CHANGELOG = [
+  {
+    version: '2.0.0',
+    items: [
+      'Home screen widget — see today and this month\'s spending at a glance, updated the moment you add an expense',
+      'Privacy eye on the widget — tap to hide amounts without opening the app',
+      'Biweekly recurring expenses, plus "monthly on a chosen day" for subscriptions that bill on a specific date',
+      'Biweekly summary period (fixed Sun–Sat fortnights) with its own budget',
+      'Fixed: expired sessions now return you to the login screen instead of showing an empty app',
+    ],
+  },
   {
     version: '1.2.0',
     items: [
@@ -41,6 +52,8 @@ export default function AddExpenseScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringFreq, setRecurringFreq] = useState('monthly');
+  const [showFreqDayPicker, setShowFreqDayPicker] = useState(false);
+  const [freqTempDate, setFreqTempDate] = useState(new Date());
   const [loading, setLoading] = useState(false);
 
   const [showChangelog, setShowChangelog] = useState(false);
@@ -87,6 +100,8 @@ export default function AddExpenseScreen() {
       setDate(new Date());
       setIsRecurring(false);
       setRecurringFreq('monthly');
+      setShowFreqDayPicker(false);
+      syncWidget();
       Alert.alert('', 'Expense added.');
     } catch (e) {
       Alert.alert('Error', 'Could not save expense.');
@@ -113,6 +128,16 @@ export default function AddExpenseScreen() {
     if (d.toDateString() === today.toDateString()) return 'Today';
     if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  // 'monthly:15' = recurs monthly on the 15th
+  const isCustomFreq = recurringFreq.startsWith('monthly:');
+  const customFreqDay = isCustomFreq ? parseInt(recurringFreq.split(':')[1], 10) : null;
+
+  const ordinal = (n) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
   };
 
   return (
@@ -281,18 +306,60 @@ export default function AddExpenseScreen() {
           {isRecurring && (
             <>
               <View style={styles.freqRow}>
-                {['weekly', 'monthly', 'yearly'].map((f) => (
-                  <TouchableOpacity
-                    key={f}
-                    style={[styles.freqPill, recurringFreq === f && styles.freqPillActive]}
-                    onPress={() => setRecurringFreq(f)}
-                  >
-                    <Text style={[styles.freqText, recurringFreq === f && styles.freqTextActive]}>
-                      {f.charAt(0).toUpperCase() + f.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
+                  // Suppress regular highlight while the custom picker is open
+                  const active = recurringFreq === f && !showFreqDayPicker;
+                  return (
+                    <TouchableOpacity
+                      key={f}
+                      style={[styles.freqPill, active && styles.freqPillActive]}
+                      onPress={() => { setRecurringFreq(f); setShowFreqDayPicker(false); }}
+                    >
+                      <Text style={[styles.freqText, active && styles.freqTextActive]}>
+                        {f.charAt(0).toUpperCase() + f.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                <TouchableOpacity
+                  style={[styles.freqPill, (isCustomFreq || showFreqDayPicker) && styles.freqPillActive]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    if (showFreqDayPicker) {
+                      setShowFreqDayPicker(false);
+                    } else {
+                      setFreqTempDate(new Date());
+                      setShowFreqDayPicker(true);
+                    }
+                  }}
+                >
+                  <Text style={[styles.freqText, (isCustomFreq || showFreqDayPicker) && styles.freqTextActive]}>
+                    {isCustomFreq ? `On the ${ordinal(customFreqDay)}` : 'Custom'}
+                  </Text>
+                </TouchableOpacity>
               </View>
+              {showFreqDayPicker && (
+                <View>
+                  <DateTimePicker
+                    value={freqTempDate}
+                    mode="date"
+                    display="spinner"
+                    themeVariant="dark"
+                    onChange={(_, selected) => {
+                      if (selected) setFreqTempDate(selected);
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.dateConfirmBtn}
+                    onPress={() => {
+                      setRecurringFreq(`monthly:${freqTempDate.getDate()}`);
+                      setShowFreqDayPicker(false);
+                    }}
+                  >
+                    <Text style={styles.dateConfirmText}>✓ Repeat on the {ordinal(freqTempDate.getDate())}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -542,6 +609,7 @@ const styles = StyleSheet.create({
   },
   freqRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
   },

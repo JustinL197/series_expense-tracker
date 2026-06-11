@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearWidget } from '../utils/widgetSync';
 
 const TOKEN_KEY = 'auth_token';
 const INSTALLED_KEY = 'app_installed';
@@ -45,6 +46,7 @@ export function AuthProvider({ children }) {
   async function signOut() {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
     setToken(null);
+    clearWidget();
   }
 
   return (

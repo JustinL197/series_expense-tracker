@@ -11,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { api, localRangeBounds } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import { syncWidget } from '../utils/widgetSync';
 
 const DATE_FILTERS = [
   { label: 'All time', value: null },
@@ -19,7 +20,14 @@ const DATE_FILTERS = [
   { label: 'This month', value: 'month' },
 ];
 
-const FREQ_LABELS = { weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+const FREQ_LABELS = { weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly', yearly: 'Yearly' };
+
+// 1st, 2nd, 3rd, 15th, 21st…
+const ordinal = (n) => {
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+};
 
 export default function ExpenseListScreen() {
   const insets = useSafeAreaInsets();
@@ -50,6 +58,8 @@ export default function ExpenseListScreen() {
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [editIsRecurring, setEditIsRecurring] = useState(false);
   const [editRecurringFreq, setEditRecurringFreq] = useState('monthly');
+  const [showEditFreqDayPicker, setShowEditFreqDayPicker] = useState(false);
+  const [editFreqTempDate, setEditFreqTempDate] = useState(new Date());
 
   const dateFilterRef = useRef(null);
   const categoryFilterRef = useRef(null);
@@ -117,6 +127,7 @@ export default function ExpenseListScreen() {
         onPress: async () => {
           await api.deleteExpense(id);
           setExpenses((prev) => prev.filter((e) => e.id !== id));
+          syncWidget();
         },
       },
     ]);
@@ -132,6 +143,7 @@ export default function ExpenseListScreen() {
     setEditTempDate(d);
     setEditIsRecurring(expense.isRecurring || false);
     setEditRecurringFreq(expense.recurringFreq || 'monthly');
+    setShowEditFreqDayPicker(false);
   };
 
   const handleSaveEdit = async () => {
@@ -147,6 +159,7 @@ export default function ExpenseListScreen() {
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
+      syncWidget();
     } catch (e) {
       Alert.alert('Error', 'Could not update expense.');
     }
@@ -454,18 +467,59 @@ export default function ExpenseListScreen() {
                 {editIsRecurring && (
                   <>
                     <View style={styles.freqRow}>
-                      {['weekly', 'monthly', 'yearly'].map((f) => (
-                        <TouchableOpacity
-                          key={f}
-                          style={[styles.pill, editRecurringFreq === f && styles.pillActive]}
-                          onPress={() => setEditRecurringFreq(f)}
-                        >
-                          <Text style={[styles.pillText, editRecurringFreq === f && styles.pillTextActive]}>
-                            {FREQ_LABELS[f]}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                      {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
+                        // Suppress regular highlight while the custom picker is open
+                        const active = editRecurringFreq === f && !showEditFreqDayPicker;
+                        return (
+                          <TouchableOpacity
+                            key={f}
+                            style={[styles.pill, active && styles.pillActive]}
+                            onPress={() => { setEditRecurringFreq(f); setShowEditFreqDayPicker(false); }}
+                          >
+                            <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                              {FREQ_LABELS[f]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      <TouchableOpacity
+                        style={[styles.pill, (editRecurringFreq.startsWith('monthly:') || showEditFreqDayPicker) && styles.pillActive]}
+                        onPress={() => {
+                          if (showEditFreqDayPicker) {
+                            setShowEditFreqDayPicker(false);
+                          } else {
+                            setEditFreqTempDate(new Date());
+                            setShowEditFreqDayPicker(true);
+                          }
+                        }}
+                      >
+                        <Text style={[styles.pillText, (editRecurringFreq.startsWith('monthly:') || showEditFreqDayPicker) && styles.pillTextActive]}>
+                          {editRecurringFreq.startsWith('monthly:')
+                            ? `On the ${ordinal(parseInt(editRecurringFreq.split(':')[1], 10))}`
+                            : 'Custom'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
+                    {showEditFreqDayPicker && (
+                      <View>
+                        <DateTimePicker
+                          value={editFreqTempDate}
+                          mode="date"
+                          display="spinner"
+                          themeVariant="dark"
+                          onChange={(_, selected) => { if (selected) setEditFreqTempDate(selected); }}
+                        />
+                        <TouchableOpacity
+                          style={styles.dateConfirmBtn}
+                          onPress={() => {
+                            setEditRecurringFreq(`monthly:${editFreqTempDate.getDate()}`);
+                            setShowEditFreqDayPicker(false);
+                          }}
+                        >
+                          <Text style={styles.dateConfirmText}>✓ Repeat on the {ordinal(editFreqTempDate.getDate())}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </>
                 )}
 
@@ -794,6 +848,7 @@ const styles = StyleSheet.create({
   },
   freqRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
   },

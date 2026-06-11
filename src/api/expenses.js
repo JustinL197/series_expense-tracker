@@ -40,6 +40,14 @@ export function localRangeBounds(range) {
     // Sun–Sat calendar week
     from.setDate(now.getDate() - now.getDay());
     from.setHours(0, 0, 0, 0);
+  } else if (range === 'biweek') {
+    // Fixed Sun–Sat fortnights (not rolling), anchored to a fixed epoch
+    // Sunday (Jan 4, 1970) so period boundaries never shift.
+    from.setDate(now.getDate() - now.getDay());
+    from.setHours(0, 0, 0, 0);
+    const epochSunday = new Date(1970, 0, 4);
+    const weeks = Math.round((from - epochSunday) / (7 * 24 * 3600 * 1000));
+    if (weeks % 2 !== 0) from.setDate(from.getDate() - 7);
   } else if (range === 'month') {
     from.setDate(1);
     from.setHours(0, 0, 0, 0);

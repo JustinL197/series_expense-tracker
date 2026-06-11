@@ -1,6 +1,6 @@
 # Series Expense — Project Overview
 
-Last updated: 2026-05-28 | Current build: 7 (v1.2.0)
+Last updated: 2026-06-11 | Current build: 8 (v2.0.0)
 
 ---
 
@@ -24,6 +24,9 @@ The target user is someone who wants a fast, no-friction way to log and review p
 - **react-native-safe-area-context** — dynamic insets for notch / Dynamic Island
 - **react-native-gesture-handler** — gesture support base layer
 - **@expo-google-fonts/inter** — Inter typeface
+- **expo-dev-client** — development builds (required since the widget added native code)
+- **@bacons/apple-targets** — generates the WidgetKit extension target during prebuild
+- **modules/widget-sync** — local Expo module bridging JS → App Group storage → WidgetKit reload
 
 ### Backend
 - **Node.js + Express** — REST API
@@ -117,12 +120,19 @@ model Expense {
 - Future-dated expenses supported — labelled "upcoming" in the list, excluded from period totals
 - Edit any field of an existing expense (tap row to open edit modal)
 - Delete expense from the edit modal (trash icon in header)
-- Mark an expense as recurring (weekly / monthly / yearly) — auto-added on due date
+- Recurring expenses: weekly / biweekly / monthly / yearly / custom ("monthly on the Nth", stored as `monthly:N` in `recurringFreq`) — auto-added on due date by a daily server cron
 - All expenses scoped to the authenticated user
 
+### Home Screen Widget (iOS 17+)
+- Small + medium WidgetKit widget showing Today and This Month totals, pure black
+- Updates within ~1s of any expense change (app writes totals to the App Group, then reloads timelines)
+- Privacy eye — interactive App Intent button masks amounts as `$••••` without opening the app
+- Pre-scheduled midnight timeline entry resets "Today" without app involvement
+- Swift source lives in `targets/widgets/`; data bridge in `modules/widget-sync`
+
 ### Summary Screen
-- Today / This Week / This Month totals (date ranges computed in device local timezone)
-- Week defined as Sun–Sat calendar week
+- Today / This Week / Biweekly / This Month totals (date ranges computed in device local timezone)
+- Week defined as Sun–Sat calendar week; Biweekly is a fixed Sun–Sat fortnight anchored to a constant epoch (not rolling)
 - Expense count per range
 - Breakdown by category with emoji — tap any row to drill into that category's expenses for the period
 - Per-range budget setting with progress bar and over/under indicator — always visible even with no expenses
@@ -174,7 +184,8 @@ model Expense {
 | 4 | 2026-05-20 | — | TestFlight — shared with testers |
 | 5 | 2026-05-21 | — | TestFlight — auth + categories overhaul |
 | 6 | 2026-05-22 | 1.1.0 | TestFlight — ~8 testers |
-| 7 | 2026-05-28 | 1.2.0 | Ready to submit |
+| 7 | 2026-05-28 | 1.2.0 | TestFlight |
+| 8 | 2026-06-11 | 2.0.0 | Ready to submit — widget release |
 
 **Tester count:** ~8  
 **Distribution:** TestFlight internal testing  
@@ -187,9 +198,9 @@ model Expense {
 
 ## Next Steps
 
-### Short term (Build 8)
-- Monitor build 7 with testers — collect feedback on category drill-down and recurring UX
-- Implement server-side recurring expense auto-add (cron job that creates expenses on their due date)
+### Short term (Build 9)
+- Monitor build 8 with testers — collect feedback on the widget and new recurring options
+- Consider a quick-add button on the widget (deep link into the Add screen)
 
 ### Medium term
 - **Notifications** — optional daily reminder to log expenses

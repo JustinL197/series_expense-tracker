@@ -4,6 +4,28 @@ All builds of Series Expense, newest first.
 
 ---
 
+## Build 8 — 2026-06-11 — v2.0.0
+
+### New
+- **Home screen widget** — today + this month totals at a glance, pure black to match the app. Updates instantly when an expense is added/edited/deleted; resets correctly at midnight without opening the app
+- **Privacy eye on the widget** — tap the eye icon to mask amounts as `$••••` directly on the home screen (iOS 17 interactive widget, no app launch)
+- **Biweekly recurring** frequency
+- **"Monthly on a chosen day" recurring** — pick the exact day a subscription bills (e.g. always the 15th), clamped safely for short months
+- **Biweekly summary period** — fixed Sun–Sat fortnights (not rolling), with its own budget
+
+### Changed
+- App now requires a development build for local dev (widget native code) — Expo Go no longer sufficient for widget work; JS-only development still hot-reloads via the dev client
+
+### Fixed
+- Expired sessions (JWT >7 days) now return you to the login screen instead of silently showing an empty app
+
+### Infrastructure
+- Widget target via `@bacons/apple-targets` (config-driven, CNG-compatible — `ios/` stays gitignored)
+- App Group `group.com.justin.expensetracker` shares data between app and widget
+- Local Expo module (`modules/widget-sync`) bridges JS → shared storage → WidgetKit reload
+
+---
+
 ## Build 7 — 2026-05-28 — v1.2.0
 
 ### New

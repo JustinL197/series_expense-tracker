@@ -27,9 +27,25 @@ app.use(express.json());
 
 function calcNextDueDate(fromDate, freq) {
   const d = new Date(fromDate);
-  if (freq === 'weekly')  d.setDate(d.getDate() + 7);
-  if (freq === 'monthly') d.setMonth(d.getMonth() + 1);
-  if (freq === 'yearly')  d.setFullYear(d.getFullYear() + 1);
+  if (freq === 'weekly')   d.setDate(d.getDate() + 7);
+  if (freq === 'biweekly') d.setDate(d.getDate() + 14);
+  if (freq === 'monthly')  d.setMonth(d.getMonth() + 1);
+  if (freq === 'yearly')   d.setFullYear(d.getFullYear() + 1);
+  // 'monthly:15' = recurs monthly on the 15th. Next due date is the first
+  // occurrence of that day strictly after fromDate (could be this month),
+  // clamped for short months (e.g. the 31st in February -> Feb 28/29).
+  if (typeof freq === 'string' && freq.startsWith('monthly:')) {
+    const day = parseInt(freq.split(':')[1], 10);
+    const clampedDate = (year, month) => {
+      const c = new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()));
+      // Preserve time-of-day so the date renders correctly in the user's timezone
+      c.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
+      return c;
+    };
+    let candidate = clampedDate(d.getFullYear(), d.getMonth());
+    if (candidate <= d) candidate = clampedDate(d.getFullYear(), d.getMonth() + 1);
+    return candidate;
+  }
   return d;
 }
 
