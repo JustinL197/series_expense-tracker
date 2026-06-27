@@ -139,26 +139,38 @@ struct SpendWidgetView: View {
   var entry: SpendEntry
   @Environment(\.widgetFamily) var family
 
-  var body: some View {
-    Group {
-      if family == .systemMedium {
-        HStack(alignment: .center) {
-          StatBlock(label: "TODAY", amount: entry.today, hidden: entry.hidden)
-          Spacer()
-          StatBlock(label: "THIS MONTH", amount: entry.month, hidden: entry.hidden)
-        }
-        .padding(.horizontal, 4)
-      } else {
-        VStack(alignment: .leading) {
-          StatBlock(label: "TODAY", amount: entry.today, hidden: entry.hidden)
-          Spacer()
-          StatBlock(label: "THIS MONTH", amount: entry.month, hidden: entry.hidden, large: false)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+  // Standard widget inset; we apply it ourselves since content margins are disabled.
+  private let contentInset: CGFloat = 16
+
+  @ViewBuilder
+  private var content: some View {
+    if family == .systemMedium {
+      HStack(alignment: .center) {
+        StatBlock(label: "TODAY", amount: entry.today, hidden: entry.hidden)
+        Spacer()
+        StatBlock(label: "THIS MONTH", amount: entry.month, hidden: entry.hidden)
       }
+    } else {
+      VStack(alignment: .leading) {
+        StatBlock(label: "TODAY", amount: entry.today, hidden: entry.hidden)
+        Spacer()
+        StatBlock(label: "THIS MONTH", amount: entry.month, hidden: entry.hidden, large: false)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .overlay(alignment: .topTrailing) {
+  }
+
+  var body: some View {
+    // ZStack fills the entire widget. Content margins are disabled on the
+    // configuration, so the eye is pinned a fixed distance from the true
+    // corner — identical on every device regardless of screen size.
+    ZStack(alignment: .topTrailing) {
+      content
+        .padding(contentInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
       EyeButton(hidden: entry.hidden)
+        .padding(12)
     }
     .containerBackground(for: .widget) { Color.black }
   }
@@ -172,6 +184,7 @@ struct SpendWidget: Widget {
     .configurationDisplayName("Spending")
     .description("Today and this month at a glance.")
     .supportedFamilies([.systemSmall, .systemMedium])
+    .contentMarginsDisabled()
   }
 }
 

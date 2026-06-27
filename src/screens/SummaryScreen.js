@@ -207,8 +207,14 @@ export default function SummaryScreen() {
 
       {/* Category expenses modal */}
       <Modal visible={catModal.visible} animationType="slide" transparent>
-        <Pressable style={styles.modalOverlay} onPress={() => setCatModal((prev) => ({ ...prev, visible: false }))}>
-          <Pressable style={[styles.modalSheet, styles.catModalSheet]} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          {/* Backdrop sits BEHIND the sheet — tapping it dismisses, but it never
+              intercepts the sheet's scroll gestures. */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setCatModal((prev) => ({ ...prev, visible: false }))}
+          />
+          <View style={[styles.modalSheet, styles.catModalSheet]}>
             <View style={styles.catModalHeader}>
               <View style={styles.catModalTitleGroup}>
                 {getCategoryEmoji(catModal.category) ? (
@@ -227,7 +233,7 @@ export default function SummaryScreen() {
             ) : (
               <>
                 <View style={styles.catTopDivider} />
-                <ScrollView showsVerticalScrollIndicator={false}>
+                <ScrollView style={styles.catScroll} showsVerticalScrollIndicator={false}>
                   {catModal.expenses.map((e) => (
                     <View key={e.id} style={styles.catExpenseRow}>
                       <View style={styles.catExpenseLeft}>
@@ -242,8 +248,8 @@ export default function SummaryScreen() {
                 </ScrollView>
               </>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       <Modal
@@ -449,6 +455,9 @@ const styles = StyleSheet.create({
   },
   catModalSheet: {
     maxHeight: '70%',
+  },
+  catScroll: {
+    flexShrink: 1,
   },
   catModalHeader: {
     flexDirection: 'row',
