@@ -18,7 +18,11 @@ const DATE_FILTERS = [
   { label: 'Today', value: 'day' },
   { label: 'This week', value: 'week' },
   { label: 'This month', value: 'month' },
+  { label: 'Custom', value: 'custom' },
 ];
+
+const formatRangeDate = (d) =>
+  d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 const FREQ_LABELS = { weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly', yearly: 'Yearly' };
 
@@ -49,6 +53,16 @@ export default function ExpenseListScreen() {
   const [pendingRecurring, setPendingRecurring] = useState(false);
   const [pendingUpcoming, setPendingUpcoming] = useState(false);
 
+  // Custom date range (used when the 'Custom' date filter is selected)
+  const [pendingCustomStart, setPendingCustomStart] = useState(new Date());
+  const [pendingCustomEnd, setPendingCustomEnd] = useState(new Date());
+  const [customPickerTarget, setCustomPickerTarget] = useState(null); // 'start' | 'end' | null
+  const [customTempDate, setCustomTempDate] = useState(new Date());
+
+  // Search
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [editTarget, setEditTarget] = useState(null);
   const [editAmount, setEditAmount] = useState('');
   const [editTitle, setEditTitle] = useState('');
@@ -65,11 +79,15 @@ export default function ExpenseListScreen() {
   const categoryFilterRef = useRef(null);
   const recurringFilterRef = useRef(false);
   const upcomingFilterRef = useRef(false);
+  const customRangeRef = useRef(null); // { from, to } ISO strings
 
-  const load = useCallback(async (dateF, categoryF, recurringF, upcomingF) => {
+  const load = useCallback(async (dateF, categoryF, recurringF, upcomingF, customRange) => {
     try {
       const params = {};
-      if (dateF) {
+      if (dateF === 'custom' && customRange) {
+        params.from = customRange.from;
+        params.to = customRange.to;
+      } else if (dateF) {
         const { from } = localRangeBounds(dateF);
         params.from = from;
       }
@@ -86,7 +104,7 @@ export default function ExpenseListScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    load(dateFilterRef.current, categoryFilterRef.current, recurringFilterRef.current, upcomingFilterRef.current);
+    load(dateFilterRef.current, categoryFilterRef.current, recurringFilterRef.current, upcomingFilterRef.current, customRangeRef.current);
   }, [load]));
 
   const openFilterSheet = () => {
@@ -98,16 +116,30 @@ export default function ExpenseListScreen() {
   };
 
   const applyFilters = () => {
+    let customRange = null;
+    if (pendingDate === 'custom') {
+      // Normalize: full start-of-day to end-of-day, swapping if reversed
+      const [lo, hi] = pendingCustomStart <= pendingCustomEnd
+        ? [pendingCustomStart, pendingCustomEnd]
+        : [pendingCustomEnd, pendingCustomStart];
+      const from = new Date(lo);
+      from.setHours(0, 0, 0, 0);
+      const to = new Date(hi);
+      to.setHours(23, 59, 59, 999);
+      customRange = { from: from.toISOString(), to: to.toISOString() };
+    }
     dateFilterRef.current = pendingDate;
     categoryFilterRef.current = pendingCategory;
     recurringFilterRef.current = pendingRecurring;
     upcomingFilterRef.current = pendingUpcoming;
+    customRangeRef.current = customRange;
     setDateFilter(pendingDate);
     setCategoryFilter(pendingCategory);
     setRecurringFilter(pendingRecurring);
     setUpcomingFilter(pendingUpcoming);
     setShowFilterSheet(false);
-    load(pendingDate, pendingCategory, pendingRecurring, pendingUpcoming);
+    setCustomPickerTarget(null);
+    load(pendingDate, pendingCategory, pendingRecurring, pendingUpcoming, customRange);
   };
 
   const clearFilters = () => {
@@ -115,6 +147,7 @@ export default function ExpenseListScreen() {
     setPendingCategory(null);
     setPendingRecurring(false);
     setPendingUpcoming(false);
+    setCustomPickerTarget(null);
   };
 
   const handleDelete = (id) => {
@@ -181,8 +214,14 @@ export default function ExpenseListScreen() {
 
   const hasActiveFilters = dateFilter !== null || categoryFilter !== null || recurringFilter || upcomingFilter;
 
+  // Client-side title search on the already-loaded list
+  const query = searchQuery.trim().toLowerCase();
+  const visibleExpenses = query
+    ? expenses.filter((e) => e.title.toLowerCase().includes(query))
+    : expenses;
+
   // Group expenses by category for category view
-  const grouped = expenses.reduce((acc, e) => {
+  const grouped = visibleExpenses.reduce((acc, e) => {
     if (!acc[e.category]) acc[e.category] = [];
     acc[e.category].push(e);
     return acc;
@@ -222,7 +261,7 @@ export default function ExpenseListScreen() {
 
   const renderAllView = () => (
     <FlatList
-      data={expenses}
+      data={visibleExpenses}
       keyExtractor={(item) => String(item.id)}
       renderItem={({ item }) => renderRow(item)}
       contentContainerStyle={styles.list}
@@ -269,15 +308,53 @@ export default function ExpenseListScreen() {
       {/* Header */}
       <View style={styles.headerRow}>
         <Text style={styles.header}>Expenses</Text>
-        <TouchableOpacity
-          style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
-          onPress={openFilterSheet}
-        >
-          <Text style={[styles.filterBtnText, hasActiveFilters && styles.filterBtnTextActive]}>
-            {hasActiveFilters ? 'Filtered' : 'Filter'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.iconBtn, showSearch && styles.iconBtnActive]}
+            onPress={() => {
+              setShowSearch((v) => {
+                if (v) setSearchQuery('');
+                return !v;
+              });
+            }}
+          >
+            <Ionicons
+              name="search"
+              size={15}
+              color={showSearch ? COLORS.pillActiveText : COLORS.subtext}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
+            onPress={openFilterSheet}
+          >
+            <Text style={[styles.filterBtnText, hasActiveFilters && styles.filterBtnTextActive]}>
+              {hasActiveFilters ? 'Filtered' : 'Filter'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Search */}
+      {showSearch && (
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search expenses"
+            placeholderTextColor={COLORS.subtext}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* View toggle */}
       <View style={styles.segmentedControl}>
@@ -297,9 +374,9 @@ export default function ExpenseListScreen() {
 
       {loading ? (
         <ActivityIndicator color={COLORS.text} style={{ marginTop: 60 }} />
-      ) : expenses.length === 0 ? (
+      ) : visibleExpenses.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No expenses yet.</Text>
+          <Text style={styles.emptyText}>{query ? 'No matches.' : 'No expenses yet.'}</Text>
         </View>
       ) : viewMode === 'all' ? renderAllView() : renderCategoryView()}
 
@@ -323,13 +400,63 @@ export default function ExpenseListScreen() {
                     <TouchableOpacity
                       key={f.label}
                       style={[styles.pill, active && styles.pillActive]}
-                      onPress={() => setPendingDate(active ? null : f.value)}
+                      onPress={() => {
+                        setPendingDate(active ? null : f.value);
+                        setCustomPickerTarget(null);
+                      }}
                     >
                       <Text style={[styles.pillText, active && styles.pillTextActive]}>{f.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {pendingDate === 'custom' && (
+                <>
+                  <View style={styles.customRangeRow}>
+                    <TouchableOpacity
+                      style={[styles.datePill, customPickerTarget === 'start' && styles.datePillActive]}
+                      onPress={() => {
+                        setCustomTempDate(pendingCustomStart);
+                        setCustomPickerTarget((t) => (t === 'start' ? null : 'start'));
+                      }}
+                    >
+                      <Text style={styles.datePillText}>{formatRangeDate(pendingCustomStart)}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.customRangeDash}>–</Text>
+                    <TouchableOpacity
+                      style={[styles.datePill, customPickerTarget === 'end' && styles.datePillActive]}
+                      onPress={() => {
+                        setCustomTempDate(pendingCustomEnd);
+                        setCustomPickerTarget((t) => (t === 'end' ? null : 'end'));
+                      }}
+                    >
+                      <Text style={styles.datePillText}>{formatRangeDate(pendingCustomEnd)}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {customPickerTarget && (
+                    <View>
+                      <DateTimePicker
+                        value={customTempDate}
+                        mode="date"
+                        display="spinner"
+                        themeVariant="dark"
+                        onChange={(_, selected) => { if (selected) setCustomTempDate(selected); }}
+                      />
+                      <TouchableOpacity
+                        style={styles.dateConfirmBtn}
+                        onPress={() => {
+                          if (customPickerTarget === 'start') setPendingCustomStart(customTempDate);
+                          else setPendingCustomEnd(customTempDate);
+                          setCustomPickerTarget(null);
+                        }}
+                      >
+                        <Text style={styles.dateConfirmText}>✓ Confirm</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
 
               {allCategories.length > 0 && (
                 <>
@@ -468,8 +595,11 @@ export default function ExpenseListScreen() {
                   <>
                     <View style={styles.freqRow}>
                       {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
-                        // Suppress regular highlight while the custom picker is open
-                        const active = editRecurringFreq === f && !showEditFreqDayPicker;
+                        // weekly/biweekly stay active with a weekday suffix ('weekly:5');
+                        // suppress highlight while the custom picker is open
+                        const base = editRecurringFreq.split(':')[0];
+                        const matches = f === 'weekly' || f === 'biweekly' ? base === f : editRecurringFreq === f;
+                        const active = matches && !showEditFreqDayPicker;
                         return (
                           <TouchableOpacity
                             key={f}
@@ -500,6 +630,28 @@ export default function ExpenseListScreen() {
                         </Text>
                       </TouchableOpacity>
                     </View>
+                    {(editRecurringFreq.split(':')[0] === 'weekly' || editRecurringFreq.split(':')[0] === 'biweekly') && !showEditFreqDayPicker && (
+                      <View style={styles.dayRow}>
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, i) => {
+                          const base = editRecurringFreq.split(':')[0];
+                          const selected = editRecurringFreq.includes(':')
+                            ? parseInt(editRecurringFreq.split(':')[1], 10)
+                            : editDate.getDay();
+                          const active = selected === i;
+                          return (
+                            <TouchableOpacity
+                              key={i}
+                              style={[styles.dayCircle, active && styles.dayCircleActive]}
+                              onPress={() => setEditRecurringFreq(`${base}:${i}`)}
+                            >
+                              <Text style={[styles.dayCircleText, active && styles.dayCircleTextActive]}>
+                                {label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
                     {showEditFreqDayPicker && (
                       <View>
                         <DateTimePicker
@@ -560,6 +712,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 2,
     textTransform: 'uppercase',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconBtn: {
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: COLORS.pill,
+    justifyContent: 'center',
+  },
+  iconBtnActive: {
+    backgroundColor: COLORS.pillActive,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: COLORS.pill,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    paddingVertical: 10,
+  },
+  searchClear: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    paddingLeft: 8,
+  },
+  customRangeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+  },
+  customRangeDash: {
+    color: COLORS.subtext,
+    fontSize: 14,
+  },
+  datePillActive: {
+    backgroundColor: '#2A2A2A',
   },
   filterBtn: {
     paddingHorizontal: 14,
@@ -851,6 +1051,30 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  dayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCircleActive: {
+    backgroundColor: COLORS.pillActive,
+  },
+  dayCircleText: {
+    color: COLORS.subtext,
+    fontSize: 13,
+  },
+  dayCircleTextActive: {
+    color: COLORS.pillActiveText,
+    fontWeight: '600',
   },
   modalActions: {
     flexDirection: 'row',

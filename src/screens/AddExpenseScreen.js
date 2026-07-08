@@ -11,8 +11,26 @@ import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
 import { syncWidget } from '../utils/widgetSync';
+import {
+  REMINDER_DEFAULTS, loadReminders, updateReminder,
+  requestNotificationPermission, formatReminderTime,
+} from '../utils/reminders';
+
+const COLLAPSED_CATEGORY_COUNT = 6;
 
 const CHANGELOG = [
+  {
+    version: '2.1.0',
+    items: [
+      'Daily reminders — set midday and evening notifications to log your expenses (tap the bell)',
+      'Search your expenses by name — tap the ⌕ icon on the Expenses screen',
+      'Custom date range in filters — pick any start and end date',
+      'Recurring expenses can now repeat on a specific weekday (e.g. biweekly on Fridays)',
+      'Category list on this screen now collapses — tap the arrow to expand',
+      'Fixed: widget privacy icon alignment on smaller screens',
+      'Fixed: category breakdown list in Summary now scrolls',
+    ],
+  },
   {
     version: '2.0.0',
     items: [
@@ -58,10 +76,30 @@ export default function AddExpenseScreen() {
 
   const [showChangelog, setShowChangelog] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
+
+  // Reminder settings sheet
+  const [showReminders, setShowReminders] = useState(false);
+  const [reminders, setReminders] = useState(REMINDER_DEFAULTS);
+  const [reminderPickerKey, setReminderPickerKey] = useState(null); // 'midday' | 'evening' | null
+  const [reminderTempTime, setReminderTempTime] = useState(new Date());
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryEmoji, setNewCategoryEmoji] = useState('');
   const [deleteMode, setDeleteMode] = useState(false);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const wiggle = useRef(new Animated.Value(0)).current;
+
+  // Collapsed category grid shows the first few; delete mode forces full grid.
+  // If the selected category would be hidden, swap it into the visible set.
+  const showAllCategories =
+    categoriesExpanded || deleteMode || allCategories.length <= COLLAPSED_CATEGORY_COUNT;
+  let visibleCategories = allCategories;
+  if (!showAllCategories) {
+    visibleCategories = allCategories.slice(0, COLLAPSED_CATEGORY_COUNT);
+    if (category && !visibleCategories.some((c) => c.label === category)) {
+      const selected = allCategories.find((c) => c.label === category);
+      if (selected) visibleCategories = [...visibleCategories.slice(0, -1), selected];
+    }
+  }
 
   useEffect(() => {
     if (deleteMode) {
@@ -134,10 +172,52 @@ export default function AddExpenseScreen() {
   const isCustomFreq = recurringFreq.startsWith('monthly:');
   const customFreqDay = isCustomFreq ? parseInt(recurringFreq.split(':')[1], 10) : null;
 
+  // 'weekly:5' / 'biweekly:5' = recurs on a specific weekday (0=Sun..6=Sat).
+  // Defaults to the expense date's weekday until the user picks one.
+  const freqBase = recurringFreq.split(':')[0];
+  const isWeekdayFreq = freqBase === 'weekly' || freqBase === 'biweekly';
+  const selectedWeekday = isWeekdayFreq
+    ? (recurringFreq.includes(':') ? parseInt(recurringFreq.split(':')[1], 10) : date.getDay())
+    : null;
+
   const ordinal = (n) => {
     const s = ['th', 'st', 'nd', 'rd'];
     const v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
+  const openReminders = async () => {
+    setReminders(await loadReminders());
+    setReminderPickerKey(null);
+    setShowReminders(true);
+  };
+
+  const toggleReminder = async (key) => {
+    const r = reminders[key];
+    if (!r.enabled) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        Alert.alert(
+          'Notifications Off',
+          'Enable notifications for Series Expense in iOS Settings to get reminders.'
+        );
+        return;
+      }
+    }
+    const updated = await updateReminder(key, { enabled: !r.enabled, hour: r.hour, minute: r.minute });
+    setReminders(updated);
+  };
+
+  const confirmReminderTime = async () => {
+    const key = reminderPickerKey;
+    const r = reminders[key];
+    const updated = await updateReminder(key, {
+      enabled: r.enabled,
+      hour: reminderTempTime.getHours(),
+      minute: reminderTempTime.getMinutes(),
+    });
+    setReminders(updated);
+    setReminderPickerKey(null);
   };
 
   return (
@@ -153,6 +233,12 @@ export default function AddExpenseScreen() {
       >
         {/* Screen header */}
         <View style={styles.screenHeader}>
+          <TouchableOpacity
+            onPress={openReminders}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="notifications-outline" size={19} color={COLORS.subtext} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowChangelog(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -190,9 +276,23 @@ export default function AddExpenseScreen() {
 
         {/* Category */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Category</Text>
+          <View style={styles.sectionLabelRow}>
+            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Category</Text>
+            {allCategories.length > COLLAPSED_CATEGORY_COUNT && !deleteMode && (
+              <TouchableOpacity
+                onPress={() => setCategoriesExpanded((v) => !v)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={categoriesExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={15}
+                  color={COLORS.subtext}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.pillGrid}>
-            {allCategories.map((cat) => {
+            {visibleCategories.map((cat) => {
               const active = category === cat.label;
               const rotation = wiggle.interpolate({
                 inputRange: [-1, 1],
@@ -307,8 +407,10 @@ export default function AddExpenseScreen() {
             <>
               <View style={styles.freqRow}>
                 {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
-                  // Suppress regular highlight while the custom picker is open
-                  const active = recurringFreq === f && !showFreqDayPicker;
+                  // weekly/biweekly stay active with a weekday suffix ('weekly:5');
+                  // suppress highlight while the custom picker is open
+                  const matches = f === 'weekly' || f === 'biweekly' ? freqBase === f : recurringFreq === f;
+                  const active = matches && !showFreqDayPicker;
                   return (
                     <TouchableOpacity
                       key={f}
@@ -338,6 +440,24 @@ export default function AddExpenseScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
+              {isWeekdayFreq && !showFreqDayPicker && (
+                <View style={styles.dayRow}>
+                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, i) => {
+                    const active = selectedWeekday === i;
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.dayCircle, active && styles.dayCircleActive]}
+                        onPress={() => setRecurringFreq(`${freqBase}:${i}`)}
+                      >
+                        <Text style={[styles.dayCircleText, active && styles.dayCircleTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
               {showFreqDayPicker && (
                 <View>
                   <DateTimePicker
@@ -375,6 +495,62 @@ export default function AddExpenseScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Reminders modal */}
+      <Modal visible={showReminders} animationType="slide" transparent>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => { setShowReminders(false); setReminderPickerKey(null); }}
+        >
+          <Pressable style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Reminders</Text>
+            <Text style={styles.reminderHint}>Daily nudges to log your expenses.</Text>
+
+            {['midday', 'evening'].map((key) => {
+              const r = reminders[key];
+              return (
+                <View key={key} style={styles.reminderRow}>
+                  <Text style={styles.reminderLabel}>{key === 'midday' ? 'Midday' : 'Evening'}</Text>
+                  <View style={styles.reminderControls}>
+                    <TouchableOpacity
+                      style={[styles.datePill, reminderPickerKey === key && styles.datePillActive]}
+                      onPress={() => {
+                        const t = new Date();
+                        t.setHours(r.hour, r.minute, 0, 0);
+                        setReminderTempTime(t);
+                        setReminderPickerKey((k) => (k === key ? null : key));
+                      }}
+                    >
+                      <Text style={styles.datePillText}>{formatReminderTime(r.hour, r.minute)}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.toggleTrack, r.enabled && styles.toggleTrackOn]}
+                      onPress={() => toggleReminder(key)}
+                    >
+                      <View style={[styles.toggleThumb, r.enabled && styles.toggleThumbOn]} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+
+            {reminderPickerKey && (
+              <View>
+                <DateTimePicker
+                  value={reminderTempTime}
+                  mode="time"
+                  display="spinner"
+                  themeVariant="dark"
+                  onChange={(_, selected) => { if (selected) setReminderTempTime(selected); }}
+                />
+                <TouchableOpacity style={styles.dateConfirmBtn} onPress={confirmReminderTime}>
+                  <Text style={styles.dateConfirmText}>✓ Confirm</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Changelog modal */}
       <Modal visible={showChangelog} animationType="slide" transparent>
@@ -510,6 +686,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 14,
   },
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
   pillGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -612,6 +794,30 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
+  },
+  dayRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  dayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayCircleActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  dayCircleText: {
+    color: '#888888',
+    fontSize: 13,
+  },
+  dayCircleTextActive: {
+    color: '#000000',
+    fontWeight: '600',
   },
   freqPill: {
     paddingHorizontal: 16,
@@ -728,7 +934,54 @@ const styles = StyleSheet.create({
   screenHeader: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 18,
     marginBottom: 4,
+  },
+  reminderHint: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    marginTop: -14,
+    marginBottom: 20,
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  reminderLabel: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  reminderControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  datePillActive: {
+    backgroundColor: '#2A2A2A',
+  },
+  toggleTrack: {
+    width: 44,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2A2A2A',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  toggleTrackOn: {
+    backgroundColor: '#FFFFFF',
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#666666',
+  },
+  toggleThumbOn: {
+    backgroundColor: '#000000',
+    alignSelf: 'flex-end',
   },
   brandingText: {
     fontFamily: 'Inter_400Regular',

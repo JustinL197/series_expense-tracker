@@ -1,6 +1,6 @@
 # Series Expense — Project Overview
 
-Last updated: 2026-06-11 | Current build: 8 (v2.0.0)
+Last updated: 2026-07-08 | Current build: 9 (v2.1.0) — pre-launch release
 
 ---
 
@@ -27,6 +27,7 @@ The target user is someone who wants a fast, no-friction way to log and review p
 - **expo-dev-client** — development builds (required since the widget added native code)
 - **@bacons/apple-targets** — generates the WidgetKit extension target during prebuild
 - **modules/widget-sync** — local Expo module bridging JS → App Group storage → WidgetKit reload
+- **expo-notifications** — local daily reminder notifications (no push server)
 
 ### Backend
 - **Node.js + Express** — REST API
@@ -120,7 +121,8 @@ model Expense {
 - Future-dated expenses supported — labelled "upcoming" in the list, excluded from period totals
 - Edit any field of an existing expense (tap row to open edit modal)
 - Delete expense from the edit modal (trash icon in header)
-- Recurring expenses: weekly / biweekly / monthly / yearly / custom ("monthly on the Nth", stored as `monthly:N` in `recurringFreq`) — auto-added on due date by a daily server cron
+- Recurring expenses: weekly / biweekly / monthly / yearly / custom — auto-added on due date by a daily server cron. Weekly/Biweekly support a specific weekday anchor (`weekly:N`, 0=Sun); custom = "monthly on the Nth" (`monthly:N`). All encoded in the `recurringFreq` string, no schema changes
+- Daily reminders — optional midday/evening local notifications with customizable times (bell icon on Add screen); stored in AsyncStorage under `reminders`
 - All expenses scoped to the authenticated user
 
 ### Home Screen Widget (iOS 17+)
@@ -140,7 +142,8 @@ model Expense {
 
 ### Expenses List Screen
 - Full expense history
-- Filter sheet — filter by date range (Today / Week / Month), category, recurring, and upcoming — combinable
+- Filter sheet — filter by date range (Today / Week / Month / Custom start–end), category, recurring, and upcoming — combinable
+- Search by expense title (⌕ icon, client-side, live as you type)
 - Filter button highlights when active
 - Toggle between flat list and grouped-by-category view
 
@@ -148,6 +151,7 @@ model Expense {
 - Fully custom — no defaults, users build their own list
 - Add with name + optional emoji, up to 30 characters
 - Long press to enter delete mode (wiggle animation)
+- Add screen grid collapses to the first 6 with a chevron to expand (selected category always visible; delete mode forces full grid)
 - Persisted server-side per user — survive reinstalls and device changes
 
 ### UI / UX
@@ -185,7 +189,8 @@ model Expense {
 | 5 | 2026-05-21 | — | TestFlight — auth + categories overhaul |
 | 6 | 2026-05-22 | 1.1.0 | TestFlight — ~8 testers |
 | 7 | 2026-05-28 | 1.2.0 | TestFlight |
-| 8 | 2026-06-11 | 2.0.0 | Ready to submit — widget release |
+| 8 | 2026-06-11 | 2.0.0 | TestFlight — widget release |
+| 9 | 2026-07-08 | 2.1.0 | Ready to submit — pre-launch release |
 
 **Tester count:** ~8  
 **Distribution:** TestFlight internal testing  
@@ -198,9 +203,16 @@ model Expense {
 
 ## Next Steps
 
-### Short term (Build 9)
-- Monitor build 8 with testers — collect feedback on the widget and new recurring options
-- Consider a quick-add button on the widget (deep link into the Add screen)
+### Short term — App Store launch
+- Ship build 9 to TestFlight, confirm widget alignment fix with small-screen testers
+- App Store listing prep: screenshots, description, keywords, App Privacy questionnaire
+- Privacy policy URL (required — app has accounts/auth). Host a simple page
+- Account type decision: launching as Individual (seller shows "Justin Lee"); Organization account for the "Series" name requires D-U-N-S / incorporation — deferred
+- Submit for App Review
+
+### After launch
+- Quick-add button on the widget (deep link into the Add screen)
+- Monitor Railway usage as installs grow; add `connection_limit` to DATABASE_URL if traffic spikes
 
 ### Medium term
 - **Notifications** — optional daily reminder to log expenses

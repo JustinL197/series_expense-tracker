@@ -31,6 +31,18 @@ function calcNextDueDate(fromDate, freq) {
   if (freq === 'biweekly') d.setDate(d.getDate() + 14);
   if (freq === 'monthly')  d.setMonth(d.getMonth() + 1);
   if (freq === 'yearly')   d.setFullYear(d.getFullYear() + 1);
+  // 'weekly:5' / 'biweekly:5' = recurs on a specific weekday (0=Sun..6=Sat).
+  // Next due is the first occurrence of that weekday strictly after fromDate;
+  // once the cadence lands on the weekday, it advances a full cycle.
+  if (typeof freq === 'string' && (freq.startsWith('weekly:') || freq.startsWith('biweekly:'))) {
+    const [base, dayStr] = freq.split(':');
+    const targetDay = parseInt(dayStr, 10);
+    const cycle = base === 'weekly' ? 7 : 14;
+    let delta = (targetDay - d.getDay() + 7) % 7;
+    if (delta === 0) delta = cycle;
+    d.setDate(d.getDate() + delta);
+    return d;
+  }
   // 'monthly:15' = recurs monthly on the 15th. Next due date is the first
   // occurrence of that day strictly after fromDate (could be this month),
   // clamped for short months (e.g. the 31st in February -> Feb 28/29).

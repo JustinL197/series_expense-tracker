@@ -2,7 +2,7 @@
   "expo": {
     "name": "Series Expense",
     "slug": "series-expense",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.justin.expensetracker",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "appleTeamId": "Z2YR48CZU7",
       "entitlements": {
         "com.apple.developer.applesignin": [

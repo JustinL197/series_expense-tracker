@@ -4,6 +4,23 @@ All builds of Series Expense, newest first.
 
 ---
 
+## Build 9 — 2026-07-08 — v2.1.0
+
+Pre-launch polish release — last planned TestFlight build before the public App Store release.
+
+### New
+- **Daily reminders** — optional midday and evening local notifications to log expenses; times customizable, entirely on-device (`expo-notifications`, no push server)
+- **Search** — ⌕ icon on the Expenses screen filters the list by title as you type
+- **Custom date range filter** — "Custom" pill in the filter's Date row reveals Start/End date pickers; sent as `from`/`to` to the existing API
+- **Weekday-anchored recurring** — Weekly/Biweekly now show an S–S day selector (e.g. "biweekly on Fridays"); stored as `weekly:N` / `biweekly:N`, no schema change
+- **Collapsible categories** — Add screen shows the first 6 categories with a chevron to expand; selected category always stays visible
+
+### Fixed
+- Widget privacy icon misaligned on smaller screens — content margins disabled, eye pinned a fixed distance from the true corner (fix from 6/11, first time shipped)
+- Category drill-down list in Summary wouldn't scroll — dismiss backdrop no longer swallows the scroll gesture (fix from 6/11, first time shipped)
+
+---
+
 ## Build 8 — 2026-06-11 — v2.0.0
 
 ### New
