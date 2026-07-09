@@ -1,6 +1,6 @@
 # Series Expense — Project Overview
 
-Last updated: 2026-07-08 | Current build: 9 (v2.1.0) — pre-launch release
+Last updated: 2026-07-08 | Current build: 10 (v2.2.0) — pre-launch release
 
 ---
 
@@ -121,7 +121,7 @@ model Expense {
 - Future-dated expenses supported — labelled "upcoming" in the list, excluded from period totals
 - Edit any field of an existing expense (tap row to open edit modal)
 - Delete expense from the edit modal (trash icon in header)
-- Recurring expenses: weekly / biweekly / monthly / yearly / custom — auto-added on due date by a daily server cron. Weekly/Biweekly support a specific weekday anchor (`weekly:N`, 0=Sun); custom = "monthly on the Nth" (`monthly:N`). All encoded in the `recurringFreq` string, no schema changes
+- Recurring expenses via a dedicated Repeat sheet: weekly / every 2 weeks (weekday-anchored), twice a month (two days of month or two nth-weekday pairs, e.g. 1st & 3rd Friday), monthly (by day or nth weekday, every-N-months interval for quarterly etc.), yearly — with optional end dates and a live preview of the next 3 occurrences. Auto-added on due date by a daily server cron; only the original row schedules (copies are plain entries). Rules live in the `recurringFreq` string — legacy encodings (`weekly:N`, `monthly:N`, …) plus JSON for rich rules; engine in `src/utils/recurrence.js`, mirrored in `server/index.js`
 - Daily reminders — optional midday/evening local notifications with customizable times (bell icon on Add screen); stored in AsyncStorage under `reminders`
 - All expenses scoped to the authenticated user
 
@@ -190,7 +190,8 @@ model Expense {
 | 6 | 2026-05-22 | 1.1.0 | TestFlight — ~8 testers |
 | 7 | 2026-05-28 | 1.2.0 | TestFlight |
 | 8 | 2026-06-11 | 2.0.0 | TestFlight — widget release |
-| 9 | 2026-07-08 | 2.1.0 | Ready to submit — pre-launch release |
+| 9 | 2026-07-08 | 2.1.0 | TestFlight |
+| 10 | 2026-07-09 | 2.2.0 | Ready to submit — recurring overhaul, pre-launch |
 
 **Tester count:** ~8  
 **Distribution:** TestFlight internal testing  

@@ -4,22 +4,35 @@ All builds of Series Expense, newest first.
 
 ---
 
-## Build 9 — 2026-07-08 — v2.1.0
+## Build 10 — 2026-07-09 — v2.2.0
 
-Pre-launch polish release — last planned TestFlight build before the public App Store release.
+Pre-launch release — recurring overhaul. Last planned TestFlight build before the public App Store release.
+
+### New
+- **Recurring redesigned as a dedicated Repeat sheet** — weekly / every 2 weeks (weekday-anchored), twice a month (pick two days on a 1–31 grid movie-theater style, or two colored weekday pairs like 1st & 3rd Friday), monthly by day or nth weekday with an every-N-months interval (quarterly, semi-annual), yearly — plus optional end dates and a live "Next: …" preview of the upcoming 3 occurrences. Rich rules serialize as JSON into the existing `recurringFreq` string; legacy encodings still parse. Engine mirrored in `src/utils/recurrence.js` and `server/index.js`
+- Add/Edit screens show a plain-English rule summary card ("Twice a month — 1st Fri & 3rd Fri · Next: Jul 17") that reopens the sheet
+
+### Changed
+- Category collapse now uses explicit "+N more ⌄" / "Show less ⌃" pills in the grid (was an ambiguous header chevron)
+
+### Fixed
+- **Recurring cron duplication bug** — auto-added copies were created with `recurringAutoAdd: true`, so every copy became a scheduler and rows doubled each cycle. Copies are now plain entries; a one-time startup repair demotes existing duplicates
+- **Modal scroll gestures** — sheets were wrapped in Pressables that raced ScrollViews for the drag gesture (scroll only worked intermittently, e.g. the What's New panel). All modals now use a backdrop-behind-the-sheet pattern
+
+---
+
+## Build 9 — 2026-07-08 — v2.1.0
 
 ### New
 - **Daily reminders** — optional midday and evening local notifications to log expenses; times customizable, entirely on-device (`expo-notifications`, no push server)
 - **Search** — ⌕ icon on the Expenses screen filters the list by title as you type
 - **Custom date range filter** — "Custom" pill in the filter's Date row reveals Start/End date pickers; sent as `from`/`to` to the existing API
-- **Recurring redesigned as a dedicated Repeat sheet** — weekly / every 2 weeks (weekday-anchored), twice a month (by dates like 1st & 15th, or nth weekdays like 1st & 3rd Friday), monthly by day or nth weekday with an every-N-months interval (quarterly, semi-annual), yearly — plus optional end dates and a live "Next: …" preview of the upcoming 3 occurrences. Rich rules serialize as JSON into the existing `recurringFreq` string; legacy encodings still parse. Engine mirrored in `src/utils/recurrence.js` and `server/index.js`
-- **Collapsible categories** — Add screen shows the first 6 categories; explicit "+N more ⌄" / "Show less ⌃" pills in the grid
+- **Weekday-anchored recurring** — Weekly/Biweekly with an S–S day selector (superseded by the Repeat sheet in 2.2.0)
+- **Collapsible categories** on the Add screen
 
 ### Fixed
-- **Recurring cron duplication bug** — auto-added copies were created with `recurringAutoAdd: true`, so every copy became a scheduler and rows doubled each cycle. Copies are now plain entries; a one-time startup repair demotes existing duplicates
-- **Modal scroll gestures** — sheets were wrapped in Pressables that raced ScrollViews for the drag gesture (scroll only worked intermittently). All modals now use a backdrop-behind-the-sheet pattern
-- Widget privacy icon misaligned on smaller screens — content margins disabled, eye pinned a fixed distance from the true corner (fix from 6/11, first time shipped)
-- Category drill-down list in Summary wouldn't scroll (fix from 6/11, first time shipped)
+- Widget privacy icon misaligned on smaller screens — content margins disabled, eye pinned a fixed distance from the true corner
+- Category drill-down list in Summary wouldn't scroll
 
 ---
 

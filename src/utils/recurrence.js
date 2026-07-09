@@ -173,7 +173,9 @@ export function describeRule(rule, anchor) {
     const weekday = rule.weekday ?? anc.getDay();
     text = `${(rule.interval ?? 1) === 2 ? 'Every 2 weeks' : 'Weekly'} on ${WEEKDAY_SHORT[weekday]}`;
   } else if (rule.type === 'semimonthly') {
-    text = `Twice a month — ${(rule.slots || []).map(slotLabel).join(' & ')}`;
+    const slots = [...(rule.slots || [])];
+    if (slots.every((s) => s.day != null)) slots.sort((x, z) => x.day - z.day);
+    text = `Twice a month — ${slots.map(slotLabel).join(' & ')}`;
   } else if (rule.type === 'monthly') {
     const interval = rule.interval ?? 1;
     const every = interval === 1 ? 'Monthly' : `Every ${interval} months`;

@@ -22,13 +22,24 @@ const COLLAPSED_CATEGORY_COUNT = 6;
 
 const CHANGELOG = [
   {
+    version: '2.2.0',
+    items: [
+      'All-new recurring setup — weekly, every 2 weeks, twice a month (pick two days or weekday pairs like 1st & 3rd Friday), monthly by day or weekday, quarterly, yearly',
+      'Recurring end dates — perfect for financing that stops after a set period',
+      'Live preview of your next three charges while setting up a recurring expense',
+      'Fixed: recurring auto-add could create duplicate entries',
+      'Fixed: What\'s New and other panels sometimes wouldn\'t scroll',
+      'Clearer category collapse — "+N more" and "Show less" buttons',
+    ],
+  },
+  {
     version: '2.1.0',
     items: [
       'Daily reminders — set midday and evening notifications to log your expenses (tap the bell)',
       'Search your expenses by name — tap the ⌕ icon on the Expenses screen',
       'Custom date range in filters — pick any start and end date',
-      'All-new recurring setup — weekly, biweekly, twice a month (e.g. 1st & 3rd Friday), monthly by day or weekday, quarterly, yearly — with optional end dates and a live preview of upcoming charges',
-      'Category list on this screen now collapses — tap "+N more" to expand',
+      'Recurring expenses can repeat on a specific weekday (e.g. biweekly on Fridays)',
+      'Category list on this screen now collapses',
       'Fixed: widget privacy icon alignment on smaller screens',
       'Fixed: category breakdown list in Summary now scrolls',
     ],
