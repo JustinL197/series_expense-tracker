@@ -112,8 +112,9 @@ export default function CalendarModal({ visible, onClose }) {
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.sheet}>
 
           {/* Header */}
           <View style={styles.sheetHeader}>
@@ -127,7 +128,7 @@ export default function CalendarModal({ visible, onClose }) {
             <View style={{ width: 24 }} />
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
             {/* Month navigation */}
             <View style={styles.monthNav}>
               <TouchableOpacity onPress={goBack} style={styles.navBtn}>
@@ -233,8 +234,8 @@ export default function CalendarModal({ visible, onClose }) {
               </View>
             )}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

@@ -259,8 +259,12 @@ export default function SummaryScreen() {
         onShow={() => budgetInputRef.current?.focus()}
       >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={styles.modalOverlay} onPress={() => { setShowBudgetModal(false); setBudgetInput(''); }}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => { setShowBudgetModal(false); setBudgetInput(''); }}
+          />
+          <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>
               {RANGE_LABELS[range]} Budget
             </Text>
@@ -296,8 +300,8 @@ export default function SummaryScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-          </Pressable>
+          </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>

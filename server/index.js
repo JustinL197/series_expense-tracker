@@ -23,42 +23,125 @@ const DEFAULT_CATEGORIES = [
 app.use(cors());
 app.use(express.json());
 
-// --- Helpers ---
+// --- Recurrence engine ---
+// Mirror of src/utils/recurrence.js on the frontend — keep in sync.
+// Rule shapes: { type: 'weekly', interval, weekday, end? } |
+// { type: 'semimonthly', slots: [{day}|{nth,weekday}, ...], end? } |
+// { type: 'monthly', interval, day?|nth+weekday, end? } | { type: 'yearly', end? }
+// Legacy strings: 'weekly', 'biweekly', 'monthly', 'yearly', 'weekly:N',
+// 'biweekly:N', 'monthly:N'.
 
-function calcNextDueDate(fromDate, freq) {
-  const d = new Date(fromDate);
-  if (freq === 'weekly')   d.setDate(d.getDate() + 7);
-  if (freq === 'biweekly') d.setDate(d.getDate() + 14);
-  if (freq === 'monthly')  d.setMonth(d.getMonth() + 1);
-  if (freq === 'yearly')   d.setFullYear(d.getFullYear() + 1);
-  // 'weekly:5' / 'biweekly:5' = recurs on a specific weekday (0=Sun..6=Sat).
-  // Next due is the first occurrence of that weekday strictly after fromDate;
-  // once the cadence lands on the weekday, it advances a full cycle.
-  if (typeof freq === 'string' && (freq.startsWith('weekly:') || freq.startsWith('biweekly:'))) {
-    const [base, dayStr] = freq.split(':');
-    const targetDay = parseInt(dayStr, 10);
-    const cycle = base === 'weekly' ? 7 : 14;
-    let delta = (targetDay - d.getDay() + 7) % 7;
-    if (delta === 0) delta = cycle;
-    d.setDate(d.getDate() + delta);
-    return d;
+function parseRule(freq) {
+  if (!freq) return null;
+  if (freq.startsWith('{')) {
+    try { return JSON.parse(freq); } catch { return null; }
   }
-  // 'monthly:15' = recurs monthly on the 15th. Next due date is the first
-  // occurrence of that day strictly after fromDate (could be this month),
-  // clamped for short months (e.g. the 31st in February -> Feb 28/29).
-  if (typeof freq === 'string' && freq.startsWith('monthly:')) {
-    const day = parseInt(freq.split(':')[1], 10);
-    const clampedDate = (year, month) => {
-      const c = new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()));
-      // Preserve time-of-day so the date renders correctly in the user's timezone
-      c.setHours(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds());
-      return c;
-    };
-    let candidate = clampedDate(d.getFullYear(), d.getMonth());
-    if (candidate <= d) candidate = clampedDate(d.getFullYear(), d.getMonth() + 1);
-    return candidate;
+  if (freq === 'weekly') return { type: 'weekly', interval: 1 };
+  if (freq === 'biweekly') return { type: 'weekly', interval: 2 };
+  if (freq === 'monthly') return { type: 'monthly', interval: 1 };
+  if (freq === 'yearly') return { type: 'yearly' };
+  if (freq.startsWith('weekly:')) return { type: 'weekly', interval: 1, weekday: +freq.split(':')[1] };
+  if (freq.startsWith('biweekly:')) return { type: 'weekly', interval: 2, weekday: +freq.split(':')[1] };
+  if (freq.startsWith('monthly:')) return { type: 'monthly', interval: 1, day: +freq.split(':')[1] };
+  return null;
+}
+
+const clampDay = (y, m, day) => Math.min(day, new Date(y, m + 1, 0).getDate());
+
+function nthWeekdayOfMonth(y, m, nth, weekday) {
+  if (nth === -1) {
+    const last = new Date(y, m + 1, 0);
+    const diff = (last.getDay() - weekday + 7) % 7;
+    return new Date(y, m, last.getDate() - diff);
   }
+  const first = new Date(y, m, 1);
+  const offset = (weekday - first.getDay() + 7) % 7;
+  const dayNum = 1 + offset + (nth - 1) * 7;
+  if (dayNum > new Date(y, m + 1, 0).getDate()) return null;
+  return new Date(y, m, dayNum);
+}
+
+function endOfDay(iso) {
+  const d = new Date(iso);
+  d.setHours(23, 59, 59, 999);
   return d;
+}
+
+// First occurrence strictly after `after`; `anchor` = the original expense
+// date (fixes biweekly phase, implicit day/weekday, yearly anniversary).
+// Returns null when the rule has ended.
+function nextOccurrence(freqOrRule, after, anchor) {
+  const rule = typeof freqOrRule === 'string' ? parseRule(freqOrRule) : freqOrRule;
+  if (!rule) return null;
+  const a = new Date(after);
+  const anc = new Date(anchor);
+  const withTime = (d) => {
+    d.setHours(anc.getHours(), anc.getMinutes(), anc.getSeconds(), 0);
+    return d;
+  };
+  const gate = (occ) => {
+    if (!occ) return null;
+    if (rule.end && occ > endOfDay(rule.end)) return null;
+    return occ;
+  };
+
+  if (rule.type === 'weekly') {
+    const weekday = rule.weekday != null ? rule.weekday : anc.getDay();
+    const cycle = 7 * (rule.interval || 1);
+    const phase = new Date(anc);
+    let delta = (weekday - phase.getDay() + 7) % 7;
+    if (delta === 0) delta = cycle;
+    phase.setDate(phase.getDate() + delta);
+    while (phase <= a) phase.setDate(phase.getDate() + cycle);
+    return gate(phase);
+  }
+
+  if (rule.type === 'monthly') {
+    const interval = rule.interval || 1;
+    for (let k = 0; k < 600; k++) {
+      const mIndex = anc.getMonth() + k * interval;
+      const y = anc.getFullYear() + Math.floor(mIndex / 12);
+      const m = ((mIndex % 12) + 12) % 12;
+      let occ;
+      if (rule.nth != null) {
+        occ = nthWeekdayOfMonth(y, m, rule.nth, rule.weekday);
+        if (!occ) continue;
+      } else {
+        occ = new Date(y, m, clampDay(y, m, rule.day != null ? rule.day : anc.getDate()));
+      }
+      withTime(occ);
+      if (occ > a) return gate(occ);
+    }
+    return null;
+  }
+
+  if (rule.type === 'semimonthly') {
+    for (let k = 0; k < 120; k++) {
+      const mIndex = anc.getMonth() + k;
+      const y = anc.getFullYear() + Math.floor(mIndex / 12);
+      const m = ((mIndex % 12) + 12) % 12;
+      const occs = (rule.slots || [])
+        .map((s) => (s.day != null
+          ? new Date(y, m, clampDay(y, m, s.day))
+          : nthWeekdayOfMonth(y, m, s.nth, s.weekday)))
+        .filter(Boolean)
+        .map(withTime)
+        .sort((x, z) => x - z);
+      for (const occ of occs) if (occ > a) return gate(occ);
+    }
+    return null;
+  }
+
+  if (rule.type === 'yearly') {
+    for (let k = 0; k < 100; k++) {
+      const y = anc.getFullYear() + k;
+      const occ = withTime(new Date(y, anc.getMonth(), clampDay(y, anc.getMonth(), anc.getDate())));
+      if (occ > a) return gate(occ);
+    }
+    return null;
+  }
+
+  return null;
 }
 
 // --- Auth middleware ---
@@ -254,7 +337,7 @@ app.post('/expenses', requireAuth, async (req, res) => {
     const recurring = !!isRecurring;
     const autoAdd = !!recurringAutoAdd;
     const nextDueDate = recurring && recurringFreq
-      ? calcNextDueDate(expenseDate, recurringFreq)
+      ? nextOccurrence(recurringFreq, expenseDate, expenseDate)
       : null;
 
     const expense = await prisma.expense.create({
@@ -291,7 +374,7 @@ app.patch('/expenses/:id', requireAuth, async (req, res) => {
     const recurring = isRecurring != null ? !!isRecurring : existing.isRecurring;
     const freq = recurringFreq !== undefined ? recurringFreq : existing.recurringFreq;
     const autoAdd = recurringAutoAdd != null ? !!recurringAutoAdd : existing.recurringAutoAdd;
-    const nextDueDate = recurring && freq ? calcNextDueDate(expenseDate, freq) : null;
+    const nextDueDate = recurring && freq ? nextOccurrence(freq, expenseDate, expenseDate) : null;
 
     const expense = await prisma.expense.update({
       where: { id },
@@ -345,9 +428,13 @@ cron.schedule('0 0 * * *', async () => {
 
     for (const e of due) {
       const newDate = e.nextDueDate;
-      const nextDueDate = calcNextDueDate(newDate, e.recurringFreq);
+      // May be null when the rule has an end date and no occurrences remain —
+      // the original keeps nextDueDate null and never fires again.
+      const nextDueDate = nextOccurrence(e.recurringFreq, newDate, e.date);
 
-      // Create new instance
+      // Create the new instance as a plain (non-scheduling) copy. It keeps the
+      // ↻ badge via isRecurring, but only the ORIGINAL row schedules future
+      // adds — copies with autoAdd would double up every cycle.
       await prisma.expense.create({
         data: {
           title: e.title,
@@ -357,12 +444,12 @@ cron.schedule('0 0 * * *', async () => {
           userId: e.userId,
           isRecurring: true,
           recurringFreq: e.recurringFreq,
-          recurringAutoAdd: true,
-          nextDueDate,
+          recurringAutoAdd: false,
+          nextDueDate: null,
         },
       });
 
-      // Advance the original's nextDueDate
+      // Advance the original's nextDueDate (or park it if the rule ended)
       await prisma.expense.update({
         where: { id: e.id },
         data: { nextDueDate },
@@ -374,6 +461,32 @@ cron.schedule('0 0 * * *', async () => {
     console.error('[cron] Error processing recurring expenses:', err);
   }
 });
+
+// One-time repair for the pre-2.2 cron bug where auto-added copies were
+// themselves created with recurringAutoAdd: true — each cycle every copy
+// spawned another scheduler. Keep the earliest row of each identical group
+// as the scheduler; demote the rest to plain entries. Idempotent.
+async function cleanupDuplicateSchedulers() {
+  const scheds = await prisma.expense.findMany({
+    where: { isRecurring: true, recurringAutoAdd: true },
+    orderBy: { date: 'asc' },
+  });
+  const seen = new Set();
+  const demote = [];
+  for (const e of scheds) {
+    const key = [e.userId, e.title, e.amount, e.category, e.recurringFreq].join('|');
+    if (seen.has(key)) demote.push(e.id);
+    else seen.add(key);
+  }
+  if (demote.length) {
+    await prisma.expense.updateMany({
+      where: { id: { in: demote } },
+      data: { recurringAutoAdd: false, nextDueDate: null },
+    });
+    console.log(`[repair] Demoted ${demote.length} duplicate recurring scheduler row(s)`);
+  }
+}
+cleanupDuplicateSchedulers().catch((e) => console.error('[repair] failed:', e));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

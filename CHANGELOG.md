@@ -12,12 +12,14 @@ Pre-launch polish release — last planned TestFlight build before the public Ap
 - **Daily reminders** — optional midday and evening local notifications to log expenses; times customizable, entirely on-device (`expo-notifications`, no push server)
 - **Search** — ⌕ icon on the Expenses screen filters the list by title as you type
 - **Custom date range filter** — "Custom" pill in the filter's Date row reveals Start/End date pickers; sent as `from`/`to` to the existing API
-- **Weekday-anchored recurring** — Weekly/Biweekly now show an S–S day selector (e.g. "biweekly on Fridays"); stored as `weekly:N` / `biweekly:N`, no schema change
-- **Collapsible categories** — Add screen shows the first 6 categories with a chevron to expand; selected category always stays visible
+- **Recurring redesigned as a dedicated Repeat sheet** — weekly / every 2 weeks (weekday-anchored), twice a month (by dates like 1st & 15th, or nth weekdays like 1st & 3rd Friday), monthly by day or nth weekday with an every-N-months interval (quarterly, semi-annual), yearly — plus optional end dates and a live "Next: …" preview of the upcoming 3 occurrences. Rich rules serialize as JSON into the existing `recurringFreq` string; legacy encodings still parse. Engine mirrored in `src/utils/recurrence.js` and `server/index.js`
+- **Collapsible categories** — Add screen shows the first 6 categories; explicit "+N more ⌄" / "Show less ⌃" pills in the grid
 
 ### Fixed
+- **Recurring cron duplication bug** — auto-added copies were created with `recurringAutoAdd: true`, so every copy became a scheduler and rows doubled each cycle. Copies are now plain entries; a one-time startup repair demotes existing duplicates
+- **Modal scroll gestures** — sheets were wrapped in Pressables that raced ScrollViews for the drag gesture (scroll only worked intermittently). All modals now use a backdrop-behind-the-sheet pattern
 - Widget privacy icon misaligned on smaller screens — content margins disabled, eye pinned a fixed distance from the true corner (fix from 6/11, first time shipped)
-- Category drill-down list in Summary wouldn't scroll — dismiss backdrop no longer swallows the scroll gesture (fix from 6/11, first time shipped)
+- Category drill-down list in Summary wouldn't scroll (fix from 6/11, first time shipped)
 
 ---
 

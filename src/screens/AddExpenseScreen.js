@@ -15,6 +15,8 @@ import {
   REMINDER_DEFAULTS, loadReminders, updateReminder,
   requestNotificationPermission, formatReminderTime,
 } from '../utils/reminders';
+import RepeatSheet from '../components/RepeatSheet';
+import { serializeRule, describeRule, occurrencesAfter } from '../utils/recurrence';
 
 const COLLAPSED_CATEGORY_COUNT = 6;
 
@@ -25,8 +27,8 @@ const CHANGELOG = [
       'Daily reminders — set midday and evening notifications to log your expenses (tap the bell)',
       'Search your expenses by name — tap the ⌕ icon on the Expenses screen',
       'Custom date range in filters — pick any start and end date',
-      'Recurring expenses can now repeat on a specific weekday (e.g. biweekly on Fridays)',
-      'Category list on this screen now collapses — tap the arrow to expand',
+      'All-new recurring setup — weekly, biweekly, twice a month (e.g. 1st & 3rd Friday), monthly by day or weekday, quarterly, yearly — with optional end dates and a live preview of upcoming charges',
+      'Category list on this screen now collapses — tap "+N more" to expand',
       'Fixed: widget privacy icon alignment on smaller screens',
       'Fixed: category breakdown list in Summary now scrolls',
     ],
@@ -69,9 +71,8 @@ export default function AddExpenseScreen() {
   const [tempDate, setTempDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringFreq, setRecurringFreq] = useState('monthly');
-  const [showFreqDayPicker, setShowFreqDayPicker] = useState(false);
-  const [freqTempDate, setFreqTempDate] = useState(new Date());
+  const [recurringRule, setRecurringRule] = useState(null);
+  const [showRepeatSheet, setShowRepeatSheet] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [showChangelog, setShowChangelog] = useState(false);
@@ -128,17 +129,16 @@ export default function AddExpenseScreen() {
         category,
         amount: parseFloat(amount),
         date: date.toISOString(),
-        isRecurring,
-        recurringFreq: isRecurring ? recurringFreq : null,
-        recurringAutoAdd: isRecurring,
+        isRecurring: isRecurring && !!recurringRule,
+        recurringFreq: isRecurring && recurringRule ? serializeRule(recurringRule) : null,
+        recurringAutoAdd: isRecurring && !!recurringRule,
       });
       setAmount('');
       setTitle('');
       setCategory(null);
       setDate(new Date());
       setIsRecurring(false);
-      setRecurringFreq('monthly');
-      setShowFreqDayPicker(false);
+      setRecurringRule(null);
       syncWidget();
       Alert.alert('', 'Expense added.');
     } catch (e) {
@@ -168,23 +168,19 @@ export default function AddExpenseScreen() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // 'monthly:15' = recurs monthly on the 15th
-  const isCustomFreq = recurringFreq.startsWith('monthly:');
-  const customFreqDay = isCustomFreq ? parseInt(recurringFreq.split(':')[1], 10) : null;
-
-  // 'weekly:5' / 'biweekly:5' = recurs on a specific weekday (0=Sun..6=Sat).
-  // Defaults to the expense date's weekday until the user picks one.
-  const freqBase = recurringFreq.split(':')[0];
-  const isWeekdayFreq = freqBase === 'weekly' || freqBase === 'biweekly';
-  const selectedWeekday = isWeekdayFreq
-    ? (recurringFreq.includes(':') ? parseInt(recurringFreq.split(':')[1], 10) : date.getDay())
-    : null;
-
-  const ordinal = (n) => {
-    const s = ['th', 'st', 'nd', 'rd'];
-    const v = n % 100;
-    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  const toggleRecurring = () => {
+    if (isRecurring) {
+      setIsRecurring(false);
+      return;
+    }
+    setIsRecurring(true);
+    setRecurringRule({ type: 'monthly', interval: 1, day: date.getDate() });
+    setShowRepeatSheet(true);
   };
+
+  const nextPreview = isRecurring && recurringRule
+    ? occurrencesAfter(recurringRule, date, 1, date)[0]
+    : null;
 
   const openReminders = async () => {
     setReminders(await loadReminders());
@@ -276,21 +272,7 @@ export default function AddExpenseScreen() {
 
         {/* Category */}
         <View style={styles.section}>
-          <View style={styles.sectionLabelRow}>
-            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Category</Text>
-            {allCategories.length > COLLAPSED_CATEGORY_COUNT && !deleteMode && (
-              <TouchableOpacity
-                onPress={() => setCategoriesExpanded((v) => !v)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons
-                  name={categoriesExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={15}
-                  color={COLORS.subtext}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.sectionLabel}>Category</Text>
           <View style={styles.pillGrid}>
             {visibleCategories.map((cat) => {
               const active = category === cat.label;
@@ -336,6 +318,26 @@ export default function AddExpenseScreen() {
                 </Animated.View>
               );
             })}
+            {!deleteMode && !showAllCategories && (
+              <TouchableOpacity
+                style={styles.moreCategoriesPill}
+                onPress={() => setCategoriesExpanded(true)}
+              >
+                <Text style={styles.moreCategoriesText}>
+                  +{allCategories.length - visibleCategories.length} more
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={COLORS.subtext} />
+              </TouchableOpacity>
+            )}
+            {!deleteMode && categoriesExpanded && allCategories.length > COLLAPSED_CATEGORY_COUNT && (
+              <TouchableOpacity
+                style={styles.moreCategoriesPill}
+                onPress={() => setCategoriesExpanded(false)}
+              >
+                <Text style={styles.moreCategoriesText}>Show less</Text>
+                <Ionicons name="chevron-up" size={12} color={COLORS.subtext} />
+              </TouchableOpacity>
+            )}
             {!deleteMode && (
               <TouchableOpacity
                 style={styles.addCategoryPill}
@@ -396,91 +398,25 @@ export default function AddExpenseScreen() {
         <View style={styles.section}>
           <TouchableOpacity
             style={[styles.recurringPill, isRecurring && styles.recurringPillOn]}
-            onPress={() => setIsRecurring((v) => !v)}
+            onPress={() => { Keyboard.dismiss(); toggleRecurring(); }}
           >
             <Text style={[styles.recurringPillText, isRecurring && styles.recurringPillTextOn]}>
               ↻  Recurring  ·  {isRecurring ? 'ON' : 'OFF'}
             </Text>
           </TouchableOpacity>
 
-          {isRecurring && (
-            <>
-              <View style={styles.freqRow}>
-                {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
-                  // weekly/biweekly stay active with a weekday suffix ('weekly:5');
-                  // suppress highlight while the custom picker is open
-                  const matches = f === 'weekly' || f === 'biweekly' ? freqBase === f : recurringFreq === f;
-                  const active = matches && !showFreqDayPicker;
-                  return (
-                    <TouchableOpacity
-                      key={f}
-                      style={[styles.freqPill, active && styles.freqPillActive]}
-                      onPress={() => { setRecurringFreq(f); setShowFreqDayPicker(false); }}
-                    >
-                      <Text style={[styles.freqText, active && styles.freqTextActive]}>
-                        {f.charAt(0).toUpperCase() + f.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-                <TouchableOpacity
-                  style={[styles.freqPill, (isCustomFreq || showFreqDayPicker) && styles.freqPillActive]}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    if (showFreqDayPicker) {
-                      setShowFreqDayPicker(false);
-                    } else {
-                      setFreqTempDate(new Date());
-                      setShowFreqDayPicker(true);
-                    }
-                  }}
-                >
-                  <Text style={[styles.freqText, (isCustomFreq || showFreqDayPicker) && styles.freqTextActive]}>
-                    {isCustomFreq ? `On the ${ordinal(customFreqDay)}` : 'Custom'}
+          {isRecurring && recurringRule && (
+            <TouchableOpacity style={styles.ruleSummary} onPress={() => setShowRepeatSheet(true)}>
+              <View style={styles.ruleSummaryLeft}>
+                <Text style={styles.ruleSummaryText}>{describeRule(recurringRule, date)}</Text>
+                {nextPreview && (
+                  <Text style={styles.ruleSummaryNext}>
+                    Next: {nextPreview.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </Text>
-                </TouchableOpacity>
+                )}
               </View>
-              {isWeekdayFreq && !showFreqDayPicker && (
-                <View style={styles.dayRow}>
-                  {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, i) => {
-                    const active = selectedWeekday === i;
-                    return (
-                      <TouchableOpacity
-                        key={i}
-                        style={[styles.dayCircle, active && styles.dayCircleActive]}
-                        onPress={() => setRecurringFreq(`${freqBase}:${i}`)}
-                      >
-                        <Text style={[styles.dayCircleText, active && styles.dayCircleTextActive]}>
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-              {showFreqDayPicker && (
-                <View>
-                  <DateTimePicker
-                    value={freqTempDate}
-                    mode="date"
-                    display="spinner"
-                    themeVariant="dark"
-                    onChange={(_, selected) => {
-                      if (selected) setFreqTempDate(selected);
-                    }}
-                  />
-                  <TouchableOpacity
-                    style={styles.dateConfirmBtn}
-                    onPress={() => {
-                      setRecurringFreq(`monthly:${freqTempDate.getDate()}`);
-                      setShowFreqDayPicker(false);
-                    }}
-                  >
-                    <Text style={styles.dateConfirmText}>✓ Repeat on the {ordinal(freqTempDate.getDate())}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </>
+              <Ionicons name="chevron-forward" size={15} color={COLORS.subtext} />
+            </TouchableOpacity>
           )}
         </View>
 
@@ -496,13 +432,23 @@ export default function AddExpenseScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Recurring rule setup */}
+      <RepeatSheet
+        visible={showRepeatSheet}
+        onClose={() => setShowRepeatSheet(false)}
+        anchorDate={date}
+        rule={recurringRule}
+        onChange={setRecurringRule}
+      />
+
       {/* Reminders modal */}
       <Modal visible={showReminders} animationType="slide" transparent>
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => { setShowReminders(false); setReminderPickerKey(null); }}
-        >
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => { setShowReminders(false); setReminderPickerKey(null); }}
+          />
+          <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Reminders</Text>
             <Text style={styles.reminderHint}>Daily nudges to log your expenses.</Text>
 
@@ -548,21 +494,22 @@ export default function AddExpenseScreen() {
                 </TouchableOpacity>
               </View>
             )}
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Changelog modal */}
       <Modal visible={showChangelog} animationType="slide" transparent>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowChangelog(false)}>
-          <Pressable style={styles.changelogSheet} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowChangelog(false)} />
+          <View style={styles.changelogSheet}>
             <View style={styles.changelogHeader}>
               <Text style={styles.changelogTitle}>What's New</Text>
               <TouchableOpacity onPress={() => setShowChangelog(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={20} color={COLORS.subtext} />
               </TouchableOpacity>
             </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
               {CHANGELOG.map((release) => (
                 <View key={release.version} style={styles.changelogRelease}>
                   <Text style={styles.changelogVersion}>v{release.version}</Text>
@@ -575,15 +522,19 @@ export default function AddExpenseScreen() {
                 </View>
               ))}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Add category modal */}
       <Modal visible={showAddCategory} animationType="slide" transparent>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable style={styles.modalOverlay} onPress={() => { setNewCategoryName(''); setNewCategoryEmoji(''); setShowAddCategory(false); }}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => { setNewCategoryName(''); setNewCategoryEmoji(''); setShowAddCategory(false); }}
+          />
+          <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>New Category</Text>
 
             <Text style={styles.modalLabel}>Name</Text>
@@ -628,8 +579,8 @@ export default function AddExpenseScreen() {
                 <Text style={styles.modalSaveText}>Add</Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
         </KeyboardAvoidingView>
       </Modal>
     </KeyboardAvoidingView>
@@ -686,11 +637,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 14,
   },
-  sectionLabelRow: {
+  moreCategoriesPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+  },
+  moreCategoriesText: {
+    color: COLORS.subtext,
+    fontSize: 14,
   },
   pillGrid: {
     flexDirection: 'row',
@@ -789,52 +746,28 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontWeight: '600',
   },
-  freqRow: {
+  ruleSummary: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  dayRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  dayCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#1A1A1A',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayCircleActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  dayCircleText: {
-    color: '#888888',
-    fontSize: 13,
-  },
-  dayCircleTextActive: {
-    color: '#000000',
-    fontWeight: '600',
-  },
-  freqPill: {
+    justifyContent: 'space-between',
+    marginTop: 14,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: '#1A1A1A',
   },
-  freqPillActive: {
-    backgroundColor: '#FFFFFF',
+  ruleSummaryLeft: {
+    flex: 1,
+    marginRight: 10,
   },
-  freqText: {
-    color: '#888888',
-    fontSize: 13,
+  ruleSummaryText: {
+    color: COLORS.text,
+    fontSize: 14,
+    marginBottom: 2,
   },
-  freqTextActive: {
-    color: '#000000',
-    fontWeight: '600',
+  ruleSummaryNext: {
+    color: COLORS.subtext,
+    fontSize: 12,
   },
   dateConfirmBtn: {
     alignSelf: 'center',

@@ -12,6 +12,8 @@ import { api, localRangeBounds } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
 import { syncWidget } from '../utils/widgetSync';
+import RepeatSheet from '../components/RepeatSheet';
+import { parseRule, serializeRule, describeRule } from '../utils/recurrence';
 
 const DATE_FILTERS = [
   { label: 'All time', value: null },
@@ -24,14 +26,6 @@ const DATE_FILTERS = [
 const formatRangeDate = (d) =>
   d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-const FREQ_LABELS = { weekly: 'Weekly', biweekly: 'Biweekly', monthly: 'Monthly', yearly: 'Yearly' };
-
-// 1st, 2nd, 3rd, 15th, 21st…
-const ordinal = (n) => {
-  const s = ['th', 'st', 'nd', 'rd'];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
-};
 
 export default function ExpenseListScreen() {
   const insets = useSafeAreaInsets();
@@ -71,9 +65,8 @@ export default function ExpenseListScreen() {
   const [editTempDate, setEditTempDate] = useState(new Date());
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [editIsRecurring, setEditIsRecurring] = useState(false);
-  const [editRecurringFreq, setEditRecurringFreq] = useState('monthly');
-  const [showEditFreqDayPicker, setShowEditFreqDayPicker] = useState(false);
-  const [editFreqTempDate, setEditFreqTempDate] = useState(new Date());
+  const [editRecurringRule, setEditRecurringRule] = useState(null);
+  const [showEditRepeatSheet, setShowEditRepeatSheet] = useState(false);
 
   const dateFilterRef = useRef(null);
   const categoryFilterRef = useRef(null);
@@ -175,8 +168,23 @@ export default function ExpenseListScreen() {
     setEditDate(d);
     setEditTempDate(d);
     setEditIsRecurring(expense.isRecurring || false);
-    setEditRecurringFreq(expense.recurringFreq || 'monthly');
-    setShowEditFreqDayPicker(false);
+    setEditRecurringRule(
+      parseRule(expense.recurringFreq) ||
+      { type: 'monthly', interval: 1, day: d.getDate() }
+    );
+    setShowEditRepeatSheet(false);
+  };
+
+  const toggleEditRecurring = () => {
+    if (editIsRecurring) {
+      setEditIsRecurring(false);
+      return;
+    }
+    setEditIsRecurring(true);
+    if (!editRecurringRule) {
+      setEditRecurringRule({ type: 'monthly', interval: 1, day: editDate.getDate() });
+    }
+    setShowEditRepeatSheet(true);
   };
 
   const handleSaveEdit = async () => {
@@ -186,9 +194,9 @@ export default function ExpenseListScreen() {
         category: editCategory,
         amount: parseFloat(editAmount),
         date: editDate.toISOString(),
-        isRecurring: editIsRecurring,
-        recurringFreq: editIsRecurring ? editRecurringFreq : null,
-        recurringAutoAdd: editIsRecurring,
+        isRecurring: editIsRecurring && !!editRecurringRule,
+        recurringFreq: editIsRecurring && editRecurringRule ? serializeRule(editRecurringRule) : null,
+        recurringAutoAdd: editIsRecurring && !!editRecurringRule,
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
@@ -382,8 +390,9 @@ export default function ExpenseListScreen() {
 
       {/* Filter sheet */}
       <Modal visible={showFilterSheet} animationType="slide" transparent>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowFilterSheet(false)}>
-          <Pressable style={styles.modalSheet} onPress={() => {}}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowFilterSheet(false)} />
+          <View style={styles.modalSheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.modalTitle}>Filter</Text>
               <TouchableOpacity onPress={clearFilters}>
@@ -504,15 +513,19 @@ export default function ExpenseListScreen() {
                 <Text style={styles.modalSaveText}>Apply</Text>
               </TouchableOpacity>
             </View>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
 
       {/* Edit modal */}
       <Modal visible={!!editTarget} animationType="slide" transparent>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={styles.modalOverlay} onPress={() => { setEditTarget(null); setShowEditDatePicker(false); }}>
-            <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => { setEditTarget(null); setShowEditDatePicker(false); }}
+            />
+            <View style={styles.modalSheet}>
               <View style={styles.editModalHeader}>
                 <Text style={styles.modalTitle}>Edit Expense</Text>
                 <TouchableOpacity
@@ -522,7 +535,7 @@ export default function ExpenseListScreen() {
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </TouchableOpacity>
               </View>
-              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
+              <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
 
                 <Text style={styles.modalLabel}>Amount</Text>
                 <TextInput
@@ -586,93 +599,21 @@ export default function ExpenseListScreen() {
                   <Text style={styles.modalLabel}>Recurring</Text>
                   <TouchableOpacity
                     style={[styles.toggleTrack, editIsRecurring && styles.toggleTrackOn]}
-                    onPress={() => setEditIsRecurring((v) => !v)}
+                    onPress={toggleEditRecurring}
                   >
                     <View style={[styles.toggleThumb, editIsRecurring && styles.toggleThumbOn]} />
                   </TouchableOpacity>
                 </View>
-                {editIsRecurring && (
-                  <>
-                    <View style={styles.freqRow}>
-                      {['weekly', 'biweekly', 'monthly', 'yearly'].map((f) => {
-                        // weekly/biweekly stay active with a weekday suffix ('weekly:5');
-                        // suppress highlight while the custom picker is open
-                        const base = editRecurringFreq.split(':')[0];
-                        const matches = f === 'weekly' || f === 'biweekly' ? base === f : editRecurringFreq === f;
-                        const active = matches && !showEditFreqDayPicker;
-                        return (
-                          <TouchableOpacity
-                            key={f}
-                            style={[styles.pill, active && styles.pillActive]}
-                            onPress={() => { setEditRecurringFreq(f); setShowEditFreqDayPicker(false); }}
-                          >
-                            <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                              {FREQ_LABELS[f]}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                      <TouchableOpacity
-                        style={[styles.pill, (editRecurringFreq.startsWith('monthly:') || showEditFreqDayPicker) && styles.pillActive]}
-                        onPress={() => {
-                          if (showEditFreqDayPicker) {
-                            setShowEditFreqDayPicker(false);
-                          } else {
-                            setEditFreqTempDate(new Date());
-                            setShowEditFreqDayPicker(true);
-                          }
-                        }}
-                      >
-                        <Text style={[styles.pillText, (editRecurringFreq.startsWith('monthly:') || showEditFreqDayPicker) && styles.pillTextActive]}>
-                          {editRecurringFreq.startsWith('monthly:')
-                            ? `On the ${ordinal(parseInt(editRecurringFreq.split(':')[1], 10))}`
-                            : 'Custom'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    {(editRecurringFreq.split(':')[0] === 'weekly' || editRecurringFreq.split(':')[0] === 'biweekly') && !showEditFreqDayPicker && (
-                      <View style={styles.dayRow}>
-                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, i) => {
-                          const base = editRecurringFreq.split(':')[0];
-                          const selected = editRecurringFreq.includes(':')
-                            ? parseInt(editRecurringFreq.split(':')[1], 10)
-                            : editDate.getDay();
-                          const active = selected === i;
-                          return (
-                            <TouchableOpacity
-                              key={i}
-                              style={[styles.dayCircle, active && styles.dayCircleActive]}
-                              onPress={() => setEditRecurringFreq(`${base}:${i}`)}
-                            >
-                              <Text style={[styles.dayCircleText, active && styles.dayCircleTextActive]}>
-                                {label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    )}
-                    {showEditFreqDayPicker && (
-                      <View>
-                        <DateTimePicker
-                          value={editFreqTempDate}
-                          mode="date"
-                          display="spinner"
-                          themeVariant="dark"
-                          onChange={(_, selected) => { if (selected) setEditFreqTempDate(selected); }}
-                        />
-                        <TouchableOpacity
-                          style={styles.dateConfirmBtn}
-                          onPress={() => {
-                            setEditRecurringFreq(`monthly:${editFreqTempDate.getDate()}`);
-                            setShowEditFreqDayPicker(false);
-                          }}
-                        >
-                          <Text style={styles.dateConfirmText}>✓ Repeat on the {ordinal(editFreqTempDate.getDate())}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </>
+                {editIsRecurring && editRecurringRule && (
+                  <TouchableOpacity
+                    style={styles.ruleSummary}
+                    onPress={() => setShowEditRepeatSheet(true)}
+                  >
+                    <Text style={styles.ruleSummaryText}>
+                      {describeRule(editRecurringRule, editDate)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={15} color={COLORS.subtext} />
+                  </TouchableOpacity>
                 )}
 
                 <View style={styles.modalActions}>
@@ -687,8 +628,17 @@ export default function ExpenseListScreen() {
                   </TouchableOpacity>
                 </View>
               </ScrollView>
-            </Pressable>
-          </Pressable>
+            </View>
+
+            {/* Nested so iOS can present it above the edit modal */}
+            <RepeatSheet
+              visible={showEditRepeatSheet}
+              onClose={() => setShowEditRepeatSheet(false)}
+              anchorDate={editDate}
+              rule={editRecurringRule}
+              onChange={setEditRecurringRule}
+            />
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </View>
@@ -1046,35 +996,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     alignSelf: 'flex-end',
   },
-  freqRow: {
+  ruleSummary: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  dayRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  dayCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: COLORS.pill,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: COLORS.pill,
+    marginBottom: 14,
   },
-  dayCircleActive: {
-    backgroundColor: COLORS.pillActive,
-  },
-  dayCircleText: {
-    color: COLORS.subtext,
-    fontSize: 13,
-  },
-  dayCircleTextActive: {
-    color: COLORS.pillActiveText,
-    fontWeight: '600',
+  ruleSummaryText: {
+    color: COLORS.text,
+    fontSize: 14,
+    flex: 1,
+    marginRight: 10,
   },
   modalActions: {
     flexDirection: 'row',
