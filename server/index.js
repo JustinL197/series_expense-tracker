@@ -249,6 +249,45 @@ app.put('/categories', requireAuth, async (req, res) => {
   }
 });
 
+// --- Budget routes ---
+// Budgets are a { day, week, biweek, month } map of numbers (or null for
+// "no budget"). Stored as JSON on the user, same shape as categories, so
+// they survive reinstalls and follow the user to a new device.
+
+app.get('/budgets', requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.userId } });
+    res.json(user?.budgets ? JSON.parse(user.budgets) : {});
+  } catch (err) {
+    report(err, 'budgets:get');
+    res.status(500).json({ error: 'Failed to fetch budgets' });
+  }
+});
+
+app.put('/budgets', requireAuth, async (req, res) => {
+  try {
+    const { budgets } = req.body;
+    if (budgets == null || typeof budgets !== 'object' || Array.isArray(budgets)) {
+      return res.status(400).json({ error: 'budgets must be an object' });
+    }
+    // Keep only known ranges with positive numeric values; anything else
+    // becomes null so a bad client can't poison the stored blob.
+    const clean = {};
+    for (const key of ['day', 'week', 'biweek', 'month']) {
+      const v = budgets[key];
+      clean[key] = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+    }
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { budgets: JSON.stringify(clean) },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    report(err, 'budgets:put');
+    res.status(500).json({ error: 'Failed to save budgets' });
+  }
+});
+
 // --- Expense routes ---
 
 // GET /expenses

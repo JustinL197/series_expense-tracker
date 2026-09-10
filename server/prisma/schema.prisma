@@ -12,6 +12,7 @@ model User {
   appleId    String    @unique
   email      String?
   categories String?
+  budgets    String?
   createdAt  DateTime  @default(now())
   expenses   Expense[]
 }

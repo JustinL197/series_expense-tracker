@@ -28,16 +28,41 @@ export default function SummaryScreen() {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
 
+  // Budgets live on the user record so they survive reinstalls and follow the
+  // user to a new device. AsyncStorage is kept as an offline cache: it paints
+  // the screen instantly and still works with no connection.
+  const readLocalBudgets = async () => {
+    const values = await Promise.all(RANGES.map((r) => AsyncStorage.getItem(BUDGET_KEYS[r])));
+    return Object.fromEntries(
+      RANGES.map((r, i) => [r, values[i] ? parseFloat(values[i]) : null])
+    );
+  };
+
+  const writeLocalBudgets = async (next) => {
+    await Promise.all(RANGES.map((r) => (next[r] != null
+      ? AsyncStorage.setItem(BUDGET_KEYS[r], String(next[r]))
+      : AsyncStorage.removeItem(BUDGET_KEYS[r]))));
+  };
+
   useEffect(() => {
-    Promise.all(
-      RANGES.map((r) => AsyncStorage.getItem(BUDGET_KEYS[r]))
-    ).then((values) => {
-      setBudgets(
-        Object.fromEntries(
-          RANGES.map((r, i) => [r, values[i] ? parseFloat(values[i]) : null])
-        )
-      );
-    });
+    (async () => {
+      const local = await readLocalBudgets();
+      setBudgets(local);
+      try {
+        const remote = await api.getBudgets();
+        if (RANGES.some((r) => remote?.[r] != null)) {
+          const merged = Object.fromEntries(RANGES.map((r) => [r, remote[r] ?? null]));
+          setBudgets(merged);
+          writeLocalBudgets(merged);
+        } else if (RANGES.some((r) => local[r] != null)) {
+          // Pre-2.3 user: budgets exist only on this device. Push them up once
+          // so they aren't lost on the next reinstall.
+          await api.saveBudgets(local);
+        }
+      } catch {
+        // Offline — the local cache already on screen is the best we have.
+      }
+    })();
   }, []);
 
   const load = useCallback(async () => {
@@ -68,17 +93,25 @@ export default function SummaryScreen() {
     setShowBudgetModal(true);
   };
 
+  const persistBudgets = async (next) => {
+    setBudgets(next);
+    await writeLocalBudgets(next);
+    // Server is the source of truth, but a failed write shouldn't lose the
+    // user's entry — the local cache holds it and the next save retries.
+    try {
+      await api.saveBudgets(next);
+    } catch {}
+  };
+
   const saveBudget = async () => {
     if (!budgetInput.trim()) {
-      setBudgets((prev) => ({ ...prev, [range]: null }));
-      await AsyncStorage.removeItem(BUDGET_KEYS[range]);
+      await persistBudgets({ ...budgets, [range]: null });
       setShowBudgetModal(false);
       return;
     }
     const val = parseFloat(budgetInput);
     if (!val || val <= 0) return;
-    setBudgets((prev) => ({ ...prev, [range]: val }));
-    await AsyncStorage.setItem(BUDGET_KEYS[range], String(val));
+    await persistBudgets({ ...budgets, [range]: val });
     setShowBudgetModal(false);
     setBudgetInput('');
   };

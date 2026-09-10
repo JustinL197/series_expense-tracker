@@ -77,6 +77,8 @@ export const api = {
   },
   getLatestExpenseDate: () => request('/expenses/latest-date'),
   getCategories: () => request('/categories'),
+  getBudgets: () => request('/budgets'),
+  saveBudgets: (budgets) => request('/budgets', { method: 'PUT', body: JSON.stringify({ budgets }) }),
   saveCategories: (categories) => request('/categories', { method: 'PUT', body: JSON.stringify({ categories }) }),
   addExpense: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
   updateExpense: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
