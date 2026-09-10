@@ -5,6 +5,26 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts, Inter_400Regular, Inter_500Medium } from '@expo-google-fonts/inter';
 import * as Notifications from 'expo-notifications';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+  // Dev crashes are already visible in Metro; keeping them out of Sentry
+  // saves free-tier quota for what real users actually hit.
+  enabled: !__DEV__,
+  sendDefaultPii: false,
+  // Breadcrumbs record our [API] console logs, whose URLs carry query params
+  // like ?category=<user's own category name>. Keep the path, drop the query.
+  beforeBreadcrumb(crumb) {
+    if (typeof crumb.message === 'string') {
+      crumb.message = crumb.message.replace(/\?[^\s]*/g, '');
+    }
+    if (crumb.data?.url) {
+      crumb.data.url = String(crumb.data.url).split('?')[0];
+    }
+    return crumb;
+  },
+});
 
 // Show reminder banners even if the app happens to be foregrounded
 Notifications.setNotificationHandler({
@@ -63,7 +83,7 @@ function AppNavigator() {
   );
 }
 
-export default function App() {
+function App() {
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium });
   if (!fontsLoaded) return null;
 
@@ -78,3 +98,6 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+// Wraps the root so native crashes and unhandled JS errors are captured.
+export default Sentry.wrap(App);

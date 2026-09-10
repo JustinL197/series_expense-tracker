@@ -10,7 +10,8 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://expense-tracker-production-dfea.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://expense-tracker-production-dfea.up.railway.app",
+        "EXPO_PUBLIC_SENTRY_DSN": "https://3d7401d393af84d521f343d260eb2cda@o4512059713126400.ingest.us.sentry.io/4512059727740928"
       }
     }
   },
