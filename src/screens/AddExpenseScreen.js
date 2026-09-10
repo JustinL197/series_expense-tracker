@@ -93,8 +93,7 @@ export default function AddExpenseScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  // Reminder settings sheet
-  const [showReminders, setShowReminders] = useState(false);
+  // Reminder settings (shown inside the Settings sheet)
   const [reminders, setReminders] = useState(REMINDER_DEFAULTS);
   const [reminderPickerKey, setReminderPickerKey] = useState(null); // 'midday' | 'evening' | null
   const [reminderTempTime, setReminderTempTime] = useState(new Date());
@@ -235,12 +234,6 @@ export default function AddExpenseScreen() {
     );
   };
 
-  const openReminders = async () => {
-    setReminders(await loadReminders());
-    setReminderPickerKey(null);
-    setShowReminders(true);
-  };
-
   const toggleReminder = async (key) => {
     const r = reminders[key];
     if (!r.enabled) {
@@ -269,8 +262,7 @@ export default function AddExpenseScreen() {
     setReminderPickerKey(null);
   };
 
-  // Reminder toggles + time picker — rendered by both the Reminders modal
-  // (bell icon) and the Settings sheet, sharing the same state.
+  // Reminder toggles + time picker, shown in the Settings sheet.
   const reminderRows = (
     <>
       {['midday', 'evening'].map((key) => {
@@ -336,12 +328,6 @@ export default function AddExpenseScreen() {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="settings-outline" size={19} color={COLORS.subtext} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={openReminders}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="notifications-outline" size={19} color={COLORS.subtext} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setShowChangelog(true)}
@@ -561,6 +547,7 @@ export default function AddExpenseScreen() {
             <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
 
             <Text style={styles.modalLabel}>Reminders</Text>
+            <Text style={styles.sectionHint}>Daily nudges to log your expenses.</Text>
             {reminderRows}
 
             <Text style={[styles.modalLabel, styles.settingsSectionGap]}>Account</Text>
@@ -588,22 +575,6 @@ export default function AddExpenseScreen() {
               Deleting your account permanently removes all of your expenses from the server.
             </Text>
             </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Reminders modal */}
-      <Modal visible={showReminders} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => { setShowReminders(false); setReminderPickerKey(null); }}
-          />
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Reminders</Text>
-            <Text style={styles.reminderHint}>Daily nudges to log your expenses.</Text>
-
-            {reminderRows}
           </View>
         </View>
       </Modal>
@@ -987,6 +958,12 @@ const styles = StyleSheet.create({
   settingsSectionGap: {
     marginTop: 16,
   },
+  sectionHint: {
+    color: COLORS.subtext,
+    fontSize: 13,
+    marginTop: -6,
+    marginBottom: 16,
+  },
   settingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1007,12 +984,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     marginTop: 16,
-  },
-  reminderHint: {
-    color: COLORS.subtext,
-    fontSize: 13,
-    marginTop: -14,
-    marginBottom: 20,
   },
   reminderRow: {
     flexDirection: 'row',

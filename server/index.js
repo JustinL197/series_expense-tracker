@@ -1,3 +1,4 @@
+const Sentry = require('./instrument'); // must come first — instruments express/prisma
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -22,6 +23,14 @@ const DEFAULT_CATEGORIES = [
 
 app.use(cors());
 app.use(express.json());
+
+// Every route catches its own errors and answers with JSON, so nothing
+// propagates to Sentry's Express handler — report from the catch blocks
+// instead. `source` tags the issue so it groups per route in the dashboard.
+function report(err, source) {
+  console.error(source ? `[${source}]` : '', err);
+  Sentry.captureException(err, { tags: { source } });
+}
 
 // --- Recurrence engine ---
 // Mirror of src/utils/recurrence.js on the frontend — keep in sync.
@@ -191,7 +200,7 @@ app.post('/auth/apple', async (req, res) => {
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token });
   } catch (err) {
-    console.error('Apple auth error:', err);
+    report(err, 'auth:apple');
     res.status(401).json({ error: 'Apple authentication failed' });
   }
 });
@@ -208,7 +217,7 @@ app.delete('/account', requireAuth, async (req, res) => {
     ]);
     res.json({ success: true });
   } catch (err) {
-    console.error('Account deletion error:', err);
+    report(err, 'account:delete');
     res.status(500).json({ error: 'Failed to delete account' });
   }
 });
@@ -221,7 +230,7 @@ app.get('/categories', requireAuth, async (req, res) => {
     const categories = user?.categories ? JSON.parse(user.categories) : [];
     res.json(categories);
   } catch (err) {
-    console.error(err);
+    report(err, 'categories:get');
     res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
@@ -235,7 +244,7 @@ app.put('/categories', requireAuth, async (req, res) => {
     });
     res.json({ ok: true });
   } catch (err) {
-    console.error(err);
+    report(err, 'categories:put');
     res.status(500).json({ error: 'Failed to save categories' });
   }
 });
@@ -279,7 +288,7 @@ app.get('/expenses', requireAuth, async (req, res) => {
 
     res.json(expenses);
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:list');
     res.status(500).json({ error: 'Failed to fetch expenses' });
   }
 });
@@ -294,7 +303,7 @@ app.get('/expenses/latest-date', requireAuth, async (req, res) => {
     });
     res.json({ date: latest?.date ?? null });
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:latest-date');
     res.status(500).json({ error: 'Failed to fetch latest date' });
   }
 });
@@ -338,7 +347,7 @@ app.get('/expenses/summary', requireAuth, async (req, res) => {
 
     res.json({ total, byCategory, count: expenses.length });
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:summary');
     res.status(500).json({ error: 'Failed to fetch summary' });
   }
 });
@@ -384,7 +393,7 @@ app.post('/expenses', requireAuth, async (req, res) => {
 
     res.status(201).json(expense);
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:create');
     res.status(500).json({ error: 'Failed to create expense' });
   }
 });
@@ -445,7 +454,7 @@ app.patch('/expenses/:id', requireAuth, async (req, res) => {
 
     res.json(expense);
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:update');
     res.status(500).json({ error: 'Failed to update expense' });
   }
 });
@@ -460,7 +469,7 @@ app.delete('/expenses/:id', requireAuth, async (req, res) => {
     await prisma.expense.delete({ where: { id } });
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    report(err, 'expenses:delete');
     res.status(500).json({ error: 'Failed to delete expense' });
   }
 });
@@ -511,7 +520,7 @@ cron.schedule('0 0 * * *', async () => {
       console.log(`[cron] Auto-added recurring expense: ${e.title} for user ${e.userId}`);
     }
   } catch (err) {
-    console.error('[cron] Error processing recurring expenses:', err);
+    report(err, 'cron:recurring');
   }
 });
 
@@ -539,7 +548,11 @@ async function cleanupDuplicateSchedulers() {
     console.log(`[repair] Demoted ${demote.length} duplicate recurring scheduler row(s)`);
   }
 }
-cleanupDuplicateSchedulers().catch((e) => console.error('[repair] failed:', e));
+cleanupDuplicateSchedulers().catch((e) => report(e, 'repair:duplicates'));
+
+// Catches anything the route handlers didn't (bad JSON bodies, middleware
+// faults). Must be registered after all routes. Only 5xx are reported.
+Sentry.setupExpressErrorHandler(app);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -14,6 +14,7 @@ import { useCategories } from '../context/CategoriesContext';
 import { syncWidget } from '../utils/widgetSync';
 import RepeatSheet from '../components/RepeatSheet';
 import { parseRule, serializeRule, describeRule } from '../utils/recurrence';
+import { shareExpensesCsv } from '../utils/exportExpenses';
 
 const DATE_FILTERS = [
   { label: 'All time', value: null },
@@ -56,6 +57,8 @@ export default function ExpenseListScreen() {
   // Search
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [exporting, setExporting] = useState(false);
 
   const [editTarget, setEditTarget] = useState(null);
   const [editAmount, setEditAmount] = useState('');
@@ -250,6 +253,32 @@ export default function ExpenseListScreen() {
     setExpandedCategories((prev) => ({ ...prev, [cat]: !prev[cat] }));
   };
 
+  // Exports exactly the rows on screen (filters + search applied). Future-dated
+  // rows are money not yet spent, so they're left out unless the user
+  // explicitly asked for Upcoming — matching what Summary counts.
+  const handleExport = async () => {
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    const rows = upcomingFilter
+      ? visibleExpenses
+      : visibleExpenses.filter((e) => new Date(e.date) <= endOfToday);
+
+    if (rows.length === 0) {
+      Alert.alert('', 'No expenses to export.');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const shared = await shareExpensesCsv(rows);
+      if (!shared) Alert.alert('Export unavailable', 'Sharing is not available on this device.');
+    } catch (e) {
+      Alert.alert('Error', 'Could not export expenses.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const renderRow = (item) => {
     const { text: dateText, upcoming } = formatDate(item.date);
     return (
@@ -342,6 +371,15 @@ export default function ExpenseListScreen() {
               size={15}
               color={showSearch ? COLORS.pillActiveText : COLORS.subtext}
             />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={handleExport}
+            disabled={exporting}
+          >
+            {exporting
+              ? <ActivityIndicator size="small" color={COLORS.subtext} />
+              : <Ionicons name="share-outline" size={15} color={COLORS.subtext} />}
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
