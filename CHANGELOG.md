@@ -4,6 +4,20 @@ All builds of Series Expense, newest first.
 
 ---
 
+## Build 12 — 2026-09-09 — v2.3.0
+
+Export, budget sync, and error tracking. Intended as the App Store submission build.
+
+### New
+- **CSV export** — share icon on the Expenses screen exports the rows currently visible (filters *and* search applied) through the native share sheet. Future-dated rows are excluded unless the Upcoming filter is on, matching what Summary counts as spent. Amounts export as bare numbers so `SUM()` works, dates as local `YYYY-MM-DD`, recurrence rules as prose rather than their JSON encoding; cells are escaped and leading `=+-@` neutralized against CSV formula injection
+- **Budgets sync to the account** — previously AsyncStorage-only, so they vanished on reinstall and never reached a second device. Now JSON on `User`, same pattern as categories. Existing device-only budgets are pushed up once on first launch; AsyncStorage stays as an offline cache
+- **Error tracking (Sentry)** — server and app. Request bodies, headers and cookies are scrubbed server-side, and query strings are stripped from app breadcrumbs, so expense titles and category names never leave the server. Disabled in dev; tracing off to preserve free-tier quota
+
+### Changed
+- Reminders live in Settings; the bell icon and its standalone modal are gone
+
+---
+
 ## Build 11 — 2026-09-09 — v2.2.0
 
 App Review readiness pass — account deletion, settings, and recurring bug fixes ahead of the public App Store submission.

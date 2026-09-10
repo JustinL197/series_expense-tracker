@@ -23,6 +23,18 @@ const COLLAPSED_CATEGORY_COUNT = 6;
 
 const CHANGELOG = [
   {
+    version: '2.3.0',
+    items: [
+      'Export your expenses — tap the share icon on the Expenses screen to send whatever you\'re currently viewing to a spreadsheet (filters and search included)',
+      'Settings — tap the gear on this screen for reminders, sign out, and account deletion',
+      'Budgets now save to your account, so they survive a reinstall and follow you to a new phone',
+      'Reminders moved into Settings (the bell icon is gone)',
+      'Fixed: editing a repeating expense could quietly create duplicate copies of it',
+      'Fixed: editing an older repeating expense could add several catch-up copies overnight',
+      'Fixed: clearing the amount while editing failed silently instead of telling you why',
+    ],
+  },
+  {
     version: '2.2.0',
     items: [
       'All-new recurring setup — weekly, every 2 weeks, twice a month (pick two days or weekday pairs like 1st & 3rd Friday), monthly by day or weekday, quarterly, yearly',

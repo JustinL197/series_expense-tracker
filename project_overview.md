@@ -1,6 +1,6 @@
 # Series Expense — Project Overview
 
-Last updated: 2026-07-08 | Current build: 10 (v2.2.0) — pre-launch release
+Last updated: 2026-09-09 | Current build: 12 (v2.3.0) — App Store submission candidate
 
 ---
 
@@ -168,7 +168,7 @@ model Expense {
 
 ## In Progress
 
-- Nothing actively in development at this moment — build 7 (v1.2.0) is ready to submit
+- Build 12 (v2.3.0) is the intended App Store submission build. Code is complete; remaining work is App Store paperwork (screenshots, description, privacy questionnaire, privacy policy URL)
 
 ---
 
@@ -191,7 +191,9 @@ model Expense {
 | 7 | 2026-05-28 | 1.2.0 | TestFlight |
 | 8 | 2026-06-11 | 2.0.0 | TestFlight — widget release |
 | 9 | 2026-07-08 | 2.1.0 | TestFlight |
-| 10 | 2026-07-09 | 2.2.0 | Ready to submit — recurring overhaul, pre-launch |
+| 10 | 2026-07-09 | 2.2.0 | TestFlight — recurring overhaul |
+| 11 | 2026-09-09 | 2.2.0 | TestFlight — account deletion, Settings, recurring fixes |
+| 12 | 2026-09-09 | 2.3.0 | Export, budget sync, error tracking — submission candidate |
 
 **Tester count:** ~8  
 **Distribution:** TestFlight internal testing  
@@ -205,11 +207,16 @@ model Expense {
 ## Next Steps
 
 ### Short term — App Store launch
-- Ship build 9 to TestFlight, confirm widget alignment fix with small-screen testers
 - App Store listing prep: screenshots, description, keywords, App Privacy questionnaire
 - Privacy policy URL (required — app has accounts/auth). Host a simple page
 - Account type decision: launching as Individual (seller shows "Justin Lee"); Organization account for the "Series" name requires D-U-N-S / incorporation — deferred
 - Submit for App Review
+
+### Deferred to 2.4
+- **Per-user currency** — amounts are currency-agnostic floats, so currency is purely a display preference: a `currency` field on `User`, a picker in Settings, and a `formatMoney()` helper replacing the inline `$${x.toFixed(2)}` calls across every screen and the widget. Auto-detecting from device locale is wrong — it would relabel numbers the user entered as dollars
+- **Timezone drift** — the recurrence engine does wall-clock math, but runs in UTC on Railway and in local time on the client, so the two can disagree by a day. The cron also fires at midnight UTC, which is the previous evening for US users. A real fix means storing the user's UTC offset
+- **Calendar vs Summary mismatch** — the calendar's month total includes future-dated rows; Summary excludes them. Its month cache also only busts the month currently being viewed
+- **Session length** — JWT is 7d with no refresh, so users are bounced to the login screen weekly. Extend the expiry or issue a new token when a valid one is near expiry
 
 ### After launch
 - Quick-add button on the widget (deep link into the Add screen)
