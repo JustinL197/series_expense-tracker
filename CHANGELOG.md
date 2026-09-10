@@ -4,6 +4,27 @@ All builds of Series Expense, newest first.
 
 ---
 
+## Build 11 — 2026-09-09 — v2.2.0
+
+App Review readiness pass — account deletion, settings, and recurring bug fixes ahead of the public App Store submission.
+
+### New
+- **Settings sheet** — gear icon on the Add screen opens Settings with the reminder controls (shared with the bell icon), Sign Out, and Delete Account
+- **Account deletion** — `DELETE /account` removes the user and all their expenses in one transaction (required by App Review guideline 5.1.1(v)); signing in with Apple afterwards creates a fresh account
+- **Sign out** — previously only reachable via an expired session; now a proper button
+
+### Changed
+- Splash screen background is now black (was white — flashed on launch against the pure-black app)
+- iPhone-only (`supportsTablet: false`) so App Review doesn't evaluate the phone UI on iPad
+- Apple auth no longer accepts the Expo Go token audience (`host.exp.Exponent`) — dead since Expo Go support ended in v2.0.0, and it allowed cross-app token replay
+
+### Fixed
+- **Editing an auto-added recurring copy re-armed it as a second scheduler** — the edit sheet always sent `recurringAutoAdd: true` for recurring rows, so touching a copy (even just the amount) made rows double every cycle; edits now preserve the row's scheduler role
+- **Editing a recurring original reset its schedule into the past** — PATCH recomputed `nextDueDate` from the original expense date on every edit, so old series went "due" again and the cron backfilled one duplicate per night; `nextDueDate` is now only recomputed when the schedule actually changes, and never lands in the past (POST gets the same floor for backdated recurring expenses)
+- Edit sheet amount field now validates input like the Add screen (digits + two decimals); empty/zero amounts show a message instead of failing silently, and the server returns 400 for non-numeric amounts instead of a 500
+
+---
+
 ## Build 10 — 2026-07-09 — v2.2.0
 
 Pre-launch release — recurring overhaul. Last planned TestFlight build before the public App Store release.
