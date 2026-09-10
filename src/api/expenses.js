@@ -81,4 +81,5 @@ export const api = {
   addExpense: (data) => request('/expenses', { method: 'POST', body: JSON.stringify(data) }),
   updateExpense: (id, data) => request(`/expenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteExpense: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
+  deleteAccount: () => request('/account', { method: 'DELETE' }),
 };

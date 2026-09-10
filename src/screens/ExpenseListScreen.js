@@ -188,15 +188,26 @@ export default function ExpenseListScreen() {
   };
 
   const handleSaveEdit = async () => {
+    const parsedAmount = parseFloat(editAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !editTitle.trim()) {
+      Alert.alert('', 'Enter a name and an amount greater than zero.');
+      return;
+    }
     try {
+      const recurring = editIsRecurring && !!editRecurringRule;
       const updated = await api.updateExpense(editTarget.id, {
-        title: editTitle,
+        title: editTitle.trim(),
         category: editCategory,
-        amount: parseFloat(editAmount),
+        amount: parsedAmount,
         date: editDate.toISOString(),
-        isRecurring: editIsRecurring && !!editRecurringRule,
-        recurringFreq: editIsRecurring && editRecurringRule ? serializeRule(editRecurringRule) : null,
-        recurringAutoAdd: editIsRecurring && !!editRecurringRule,
+        isRecurring: recurring,
+        recurringFreq: recurring ? serializeRule(editRecurringRule) : null,
+        // Only the ORIGINAL row of a recurring series schedules auto-adds.
+        // Auto-added copies are isRecurring but autoAdd:false — editing one
+        // must not promote it into a second scheduler (rows would then
+        // duplicate every cycle). A newly-recurring row becomes a scheduler.
+        recurringAutoAdd: recurring &&
+          (editTarget.isRecurring ? !!editTarget.recurringAutoAdd : true),
       });
       setExpenses((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditTarget(null);
@@ -542,7 +553,10 @@ export default function ExpenseListScreen() {
                   style={styles.modalInput}
                   keyboardType="decimal-pad"
                   value={editAmount}
-                  onChangeText={setEditAmount}
+                  onChangeText={(v) => {
+                    if (/^\d*\.?\d{0,2}$/.test(v)) setEditAmount(v);
+                  }}
+                  maxLength={8}
                   placeholderTextColor={COLORS.subtext}
                 />
 

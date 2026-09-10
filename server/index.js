@@ -169,7 +169,9 @@ app.post('/auth/apple', async (req, res) => {
       return res.status(400).json({ error: 'identityToken is required' });
     }
 
-    const audience = [APPLE_BUNDLE_ID, 'host.exp.Exponent'];
+    // Only tokens issued for our own bundle ID — the Expo Go audience
+    // (host.exp.Exponent) was dropped when Expo Go support ended in v2.0.0.
+    const audience = [APPLE_BUNDLE_ID];
     const applePayload = await appleSignin.verifyIdToken(identityToken, {
       audience,
       ignoreExpiration: false,
@@ -191,6 +193,23 @@ app.post('/auth/apple', async (req, res) => {
   } catch (err) {
     console.error('Apple auth error:', err);
     res.status(401).json({ error: 'Apple authentication failed' });
+  }
+});
+
+// DELETE /account — App Review 5.1.1(v): users must be able to delete their
+// account in-app. Removes the user and every expense they own. The JWT stays
+// technically valid until expiry, but points at a userId with no data; signing
+// in again recreates a fresh account via the upsert.
+app.delete('/account', requireAuth, async (req, res) => {
+  try {
+    await prisma.$transaction([
+      prisma.expense.deleteMany({ where: { userId: req.userId } }),
+      prisma.user.deleteMany({ where: { id: req.userId } }),
+    ]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Account deletion error:', err);
+    res.status(500).json({ error: 'Failed to delete account' });
   }
 });
 
@@ -333,18 +352,27 @@ app.post('/expenses', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'title, category, and amount are required' });
     }
 
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount)) {
+      return res.status(400).json({ error: 'amount must be a number' });
+    }
+
     const expenseDate = date ? new Date(date) : new Date();
     const recurring = !!isRecurring;
     const autoAdd = !!recurringAutoAdd;
+    // Schedule from now (not the expense date) so a backdated recurring
+    // expense doesn't put nextDueDate in the past — the cron would backfill
+    // one copy per night for every missed occurrence.
+    const now = new Date();
     const nextDueDate = recurring && recurringFreq
-      ? nextOccurrence(recurringFreq, expenseDate, expenseDate)
+      ? nextOccurrence(recurringFreq, expenseDate > now ? expenseDate : now, expenseDate)
       : null;
 
     const expense = await prisma.expense.create({
       data: {
         title,
         category,
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         date: expenseDate,
         userId: req.userId,
         isRecurring: recurring,
@@ -370,18 +398,43 @@ app.patch('/expenses/:id', requireAuth, async (req, res) => {
     const existing = await prisma.expense.findFirst({ where: { id, userId: req.userId } });
     if (!existing) return res.status(404).json({ error: 'Expense not found' });
 
+    const parsedAmount = amount != null ? parseFloat(amount) : null;
+    if (amount != null && !Number.isFinite(parsedAmount)) {
+      return res.status(400).json({ error: 'amount must be a number' });
+    }
+
     const expenseDate = date ? new Date(date) : existing.date;
     const recurring = isRecurring != null ? !!isRecurring : existing.isRecurring;
     const freq = recurringFreq !== undefined ? recurringFreq : existing.recurringFreq;
     const autoAdd = recurringAutoAdd != null ? !!recurringAutoAdd : existing.recurringAutoAdd;
-    const nextDueDate = recurring && freq ? nextOccurrence(freq, expenseDate, expenseDate) : null;
+
+    // Recompute nextDueDate only when the schedule inputs actually changed.
+    // Recomputing on every edit reset the schedule to just-after the expense
+    // date — months in the past for an old series, making the cron re-add a
+    // duplicate copy per night — and recomputing from `now` on an unchanged
+    // schedule would silently skip an occurrence that is due but not yet
+    // processed. Like POST, a changed schedule starts from now at the
+    // earliest, never in the past.
+    let nextDueDate = null;
+    if (recurring && freq) {
+      const scheduleChanged =
+        !existing.isRecurring ||
+        freq !== existing.recurringFreq ||
+        expenseDate.getTime() !== existing.date.getTime();
+      if (scheduleChanged) {
+        const now = new Date();
+        nextDueDate = nextOccurrence(freq, expenseDate > now ? expenseDate : now, expenseDate);
+      } else {
+        nextDueDate = existing.nextDueDate;
+      }
+    }
 
     const expense = await prisma.expense.update({
       where: { id },
       data: {
         ...(title && { title }),
         ...(category && { category }),
-        ...(amount != null && { amount: parseFloat(amount) }),
+        ...(parsedAmount != null && { amount: parsedAmount }),
         date: expenseDate,
         isRecurring: recurring,
         recurringFreq: recurring ? freq : null,

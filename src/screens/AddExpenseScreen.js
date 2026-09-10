@@ -10,6 +10,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../api/expenses';
 import { COLORS } from '../constants';
 import { useCategories } from '../context/CategoriesContext';
+import { useAuth } from '../context/AuthContext';
 import { syncWidget } from '../utils/widgetSync';
 import {
   REMINDER_DEFAULTS, loadReminders, updateReminder,
@@ -74,6 +75,7 @@ const CHANGELOG = [
 export default function AddExpenseScreen() {
   const insets = useSafeAreaInsets();
   const { allCategories, addCategory, deleteCategory } = useCategories();
+  const { signOut } = useAuth();
 
   const [amount, setAmount] = useState('');
   const [title, setTitle] = useState('');
@@ -88,6 +90,8 @@ export default function AddExpenseScreen() {
 
   const [showChangelog, setShowChangelog] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Reminder settings sheet
   const [showReminders, setShowReminders] = useState(false);
@@ -193,6 +197,44 @@ export default function AddExpenseScreen() {
     ? occurrencesAfter(recurringRule, date, 1, date)[0]
     : null;
 
+  const openSettings = async () => {
+    setReminders(await loadReminders());
+    setReminderPickerKey(null);
+    setShowSettings(true);
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out?', 'You can sign back in with Apple at any time. Your expenses stay saved.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', onPress: () => signOut() },
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account?',
+      'This permanently deletes your account and all of your expenses from our server. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Everything',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingAccount(true);
+            try {
+              await api.deleteAccount();
+              await signOut();
+            } catch (e) {
+              Alert.alert('Error', 'Could not delete your account. Please check your connection and try again.');
+            } finally {
+              setDeletingAccount(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const openReminders = async () => {
     setReminders(await loadReminders());
     setReminderPickerKey(null);
@@ -227,6 +269,55 @@ export default function AddExpenseScreen() {
     setReminderPickerKey(null);
   };
 
+  // Reminder toggles + time picker — rendered by both the Reminders modal
+  // (bell icon) and the Settings sheet, sharing the same state.
+  const reminderRows = (
+    <>
+      {['midday', 'evening'].map((key) => {
+        const r = reminders[key];
+        return (
+          <View key={key} style={styles.reminderRow}>
+            <Text style={styles.reminderLabel}>{key === 'midday' ? 'Midday' : 'Evening'}</Text>
+            <View style={styles.reminderControls}>
+              <TouchableOpacity
+                style={[styles.datePill, reminderPickerKey === key && styles.datePillActive]}
+                onPress={() => {
+                  const t = new Date();
+                  t.setHours(r.hour, r.minute, 0, 0);
+                  setReminderTempTime(t);
+                  setReminderPickerKey((k) => (k === key ? null : key));
+                }}
+              >
+                <Text style={styles.datePillText}>{formatReminderTime(r.hour, r.minute)}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleTrack, r.enabled && styles.toggleTrackOn]}
+                onPress={() => toggleReminder(key)}
+              >
+                <View style={[styles.toggleThumb, r.enabled && styles.toggleThumbOn]} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })}
+
+      {reminderPickerKey && (
+        <View>
+          <DateTimePicker
+            value={reminderTempTime}
+            mode="time"
+            display="spinner"
+            themeVariant="dark"
+            onChange={(_, selected) => { if (selected) setReminderTempTime(selected); }}
+          />
+          <TouchableOpacity style={styles.dateConfirmBtn} onPress={confirmReminderTime}>
+            <Text style={styles.dateConfirmText}>✓ Confirm</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -240,6 +331,12 @@ export default function AddExpenseScreen() {
       >
         {/* Screen header */}
         <View style={styles.screenHeader}>
+          <TouchableOpacity
+            onPress={openSettings}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="settings-outline" size={19} color={COLORS.subtext} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={openReminders}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -452,6 +549,49 @@ export default function AddExpenseScreen() {
         onChange={setRecurringRule}
       />
 
+      {/* Settings modal */}
+      <Modal visible={showSettings} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => { if (!deletingAccount) setShowSettings(false); }}
+          />
+          <View style={[styles.modalSheet, styles.settingsSheet]}>
+            <Text style={styles.modalTitle}>Settings</Text>
+            <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
+
+            <Text style={styles.modalLabel}>Reminders</Text>
+            {reminderRows}
+
+            <Text style={[styles.modalLabel, styles.settingsSectionGap]}>Account</Text>
+            <TouchableOpacity
+              style={styles.settingsRow}
+              onPress={handleSignOut}
+              disabled={deletingAccount}
+            >
+              <Ionicons name="log-out-outline" size={19} color={COLORS.text} />
+              <Text style={styles.settingsRowText}>Sign Out</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsRow}
+              onPress={handleDeleteAccount}
+              disabled={deletingAccount}
+            >
+              <Ionicons name="trash-outline" size={19} color={COLORS.danger} />
+              <Text style={[styles.settingsRowText, styles.settingsRowDanger]}>
+                {deletingAccount ? 'Deleting…' : 'Delete Account'}
+              </Text>
+            </TouchableOpacity>
+
+            <Text style={styles.settingsHint}>
+              Deleting your account permanently removes all of your expenses from the server.
+            </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Reminders modal */}
       <Modal visible={showReminders} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -463,48 +603,7 @@ export default function AddExpenseScreen() {
             <Text style={styles.modalTitle}>Reminders</Text>
             <Text style={styles.reminderHint}>Daily nudges to log your expenses.</Text>
 
-            {['midday', 'evening'].map((key) => {
-              const r = reminders[key];
-              return (
-                <View key={key} style={styles.reminderRow}>
-                  <Text style={styles.reminderLabel}>{key === 'midday' ? 'Midday' : 'Evening'}</Text>
-                  <View style={styles.reminderControls}>
-                    <TouchableOpacity
-                      style={[styles.datePill, reminderPickerKey === key && styles.datePillActive]}
-                      onPress={() => {
-                        const t = new Date();
-                        t.setHours(r.hour, r.minute, 0, 0);
-                        setReminderTempTime(t);
-                        setReminderPickerKey((k) => (k === key ? null : key));
-                      }}
-                    >
-                      <Text style={styles.datePillText}>{formatReminderTime(r.hour, r.minute)}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.toggleTrack, r.enabled && styles.toggleTrackOn]}
-                      onPress={() => toggleReminder(key)}
-                    >
-                      <View style={[styles.toggleThumb, r.enabled && styles.toggleThumbOn]} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-
-            {reminderPickerKey && (
-              <View>
-                <DateTimePicker
-                  value={reminderTempTime}
-                  mode="time"
-                  display="spinner"
-                  themeVariant="dark"
-                  onChange={(_, selected) => { if (selected) setReminderTempTime(selected); }}
-                />
-                <TouchableOpacity style={styles.dateConfirmBtn} onPress={confirmReminderTime}>
-                  <Text style={styles.dateConfirmText}>✓ Confirm</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {reminderRows}
           </View>
         </View>
       </Modal>
@@ -881,6 +980,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 18,
     marginBottom: 4,
+  },
+  settingsSheet: {
+    maxHeight: '85%',
+  },
+  settingsSectionGap: {
+    marginTop: 16,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  settingsRowText: {
+    color: COLORS.text,
+    fontSize: 15,
+  },
+  settingsRowDanger: {
+    color: COLORS.danger,
+  },
+  settingsHint: {
+    color: COLORS.subtext,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 16,
   },
   reminderHint: {
     color: COLORS.subtext,
