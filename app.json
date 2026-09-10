@@ -45,7 +45,13 @@
       "expo-apple-authentication",
       "expo-font",
       "@bacons/apple-targets",
-      "@sentry/react-native"
+      [
+        "@sentry/react-native",
+        {
+          "organization": "series-aq",
+          "project": "series-expense-app"
+        }
+      ]
     ],
     "extra": {
       "eas": {
